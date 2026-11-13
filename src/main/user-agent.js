@@ -11,30 +11,19 @@ function setupUserAgent(session) {
   // 1. Set default session user-agent
   session.setUserAgent(LINUX_CHROME_UA);
 
-  // 2. Block redundant background telemetry pings to save memory, CPU, and network
-  const telemetryFilter = {
-    urls: [
-      '*://browser.events.data.microsoft.com/*',
-      '*://vortex.data.microsoft.com/*',
-      '*://self.events.data.microsoft.com/*',
-      '*://*.aria.ms/*',
-      '*://mobile.events.data.microsoft.com/*'
-    ]
-  };
-
-  session.webRequest.onBeforeRequest(telemetryFilter, (details, callback) => {
-    callback({ cancel: true });
-  });
-
-  // 3. Intercept and sanitize headers for all Teams requests
+  // 2. Intercept and sanitize headers for all Teams, M365, and authentication endpoints
   const filter = {
     urls: [
       '*://*.teams.microsoft.com/*',
+      '*://*.teams.cloud.microsoft/*',
+      '*://*.cloud.microsoft/*',
       '*://*.teams.live.com/*',
       '*://*.microsoft.com/*',
       '*://*.microsoftonline.com/*',
       '*://*.live.com/*',
-      '*://*.office.com/*'
+      '*://*.office.com/*',
+      '*://*.sharepoint.com/*',
+      '*://*.msftauth.net/*'
     ]
   };
 

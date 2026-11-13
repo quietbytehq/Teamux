@@ -17,7 +17,7 @@ async function loadCurrentSettings() {
   if (!window.settingsAPI) return;
   const config = await window.settingsAPI.getSettings();
 
-  teamsUrl.value = config.teamsUrl || 'https://teams.microsoft.com/v2/';
+  teamsUrl.value = config.teamsUrl || 'https://teams.cloud.microsoft/';
   closeToTray.checked = !!config.closeToTray;
   minimizeToTray.checked = !!config.minimizeToTray;
   startMinimized.checked = !!config.startMinimized;

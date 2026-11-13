@@ -13,7 +13,6 @@ function configureAppFlags(store) {
     // Hardware acceleration optimization for Linux
     app.commandLine.appendSwitch('ignore-gpu-blocklist');
     app.commandLine.appendSwitch('enable-gpu-rasterization');
-    app.commandLine.appendSwitch('enable-zero-copy', 'false');
   }
 
   // Ozone Platform hint (Wayland vs X11)
@@ -27,25 +26,20 @@ function configureAppFlags(store) {
   // -----------------------------------------------------------
   // Memory & Resource Optimization Switches
   // -----------------------------------------------------------
-  // 1. Limit V8 heap space so garbage collection runs aggressively before memory balloons
-  app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512 --optimize-for-size');
+  // 1. Adequate V8 heap space so garbage collection doesn't choke modern Teams micro-frontends
+  app.commandLine.appendSwitch('js-flags', '--max-old-space-size=2048');
 
-  // 2. Limit maximum renderer processes (prevents Teams micro-frontends from spawning 8+ renderers)
-  app.commandLine.appendSwitch('renderer-process-limit', '4');
+  // 2. Cap in-memory and disk cache sizes to avoid unbounded growth while leaving room for hashed packages
+  app.commandLine.appendSwitch('disk-cache-size', '536870912'); // 512 MB max
+  app.commandLine.appendSwitch('media-cache-size', '268435456'); // 256 MB max
 
-  // 3. Cap in-memory and disk cache sizes to avoid unbounded growth
-  app.commandLine.appendSwitch('disk-cache-size', '134217728'); // 128 MB max
-  app.commandLine.appendSwitch('media-cache-size', '67108864'); // 64 MB max
-
-  // 4. Disable unnecessary background Chromium subsystems
+  // 3. Disable unnecessary background Chromium subsystems
   app.commandLine.appendSwitch('disable-breakpad');
   app.commandLine.appendSwitch('disable-component-update');
   app.commandLine.appendSwitch('disable-domain-reliability');
   app.commandLine.appendSwitch('disable-sync');
-  app.commandLine.appendSwitch('disable-speech-api');
-  app.commandLine.appendSwitch('disable-speech-synthesis-api');
 
-  // 5. Features to enable / disable for low footprint and fast media
+  // 4. Features to enable / disable for low footprint and fast media
   const enableFeatures = [
     'WebRTCPipeWireCapturer',
     'WaylandWindowDecorations',

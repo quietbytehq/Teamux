@@ -17,6 +17,15 @@ if (!gotTheLock) {
   process.exit(0);
 }
 
+// Register default protocol handler for msteams
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient('msteams', process.execPath, [path.resolve(process.argv[1])]);
+  }
+} else {
+  app.setAsDefaultProtocolClient('msteams');
+}
+
 // 2. Initialize Persistent Store
 const store = new SettingsStore();
 
@@ -183,7 +192,7 @@ async function createMainWindow() {
 
   // Manage pop-out / child windows (e.g. Teams pop-out meeting window or call window)
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    const isTeamsDomain = /(teams\.microsoft\.com|teams\.live\.com|login\.microsoftonline\.com|login\.live\.com|account\.live\.com)/i.test(url);
+    const isTeamsDomain = /(teams\.microsoft\.com|teams\.cloud\.microsoft|cloud\.microsoft|teams\.live\.com|login\.microsoftonline\.com|login\.live\.com|account\.live\.com|outlook\.office\.com|office\.com|sharepoint\.com|msftauth\.net)/i.test(url);
     if (!isTeamsDomain) {
       shell.openExternal(url);
       return { action: 'deny' };
@@ -202,7 +211,7 @@ async function createMainWindow() {
   });
 
   // Load configured Teams URL
-  const teamsUrl = store.get('teamsUrl', 'https://teams.microsoft.com/v2/');
+  const teamsUrl = store.get('teamsUrl', 'https://teams.cloud.microsoft/');
   console.log(`[Teamux] Loading Microsoft Teams from: ${teamsUrl}`);
   mainWindow.loadURL(teamsUrl);
 

@@ -15,7 +15,7 @@ class SettingsStore {
       closeToTray: true,
       hardwareAcceleration: true,
       forceWayland: false,
-      teamsUrl: 'https://teams.microsoft.com/v2/',
+      teamsUrl: 'https://teams.cloud.microsoft/',
       windowBounds: { width: 1280, height: 820 },
       isMaximized: false,
       enableUnreadBadges: true,
