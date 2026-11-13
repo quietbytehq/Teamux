@@ -5,13 +5,23 @@
 const { ipcRenderer } = require('electron');
 
 // -------------------------------------------------------------
-// 1. Beauty Cam & Virtual Camera Processing State
+// 1. Beauty Cam & Pro Studio Processing State
 // -------------------------------------------------------------
 const studioState = {
+  // Retouch & Smoothing
   beautyEnabled: localStorage.getItem('teamux_beauty_enabled') !== 'false', // default true
   beautyLevel: parseInt(localStorage.getItem('teamux_beauty_level') || '65', 10),
   studioLightEnabled: localStorage.getItem('teamux_light_enabled') !== 'false',
   vignetteEnabled: localStorage.getItem('teamux_vignette_enabled') === 'true',
+
+  // Pro Color, Contrast & Lighting Controls
+  grayscaleEnabled: localStorage.getItem('teamux_grayscale_enabled') === 'true',
+  contrast: parseInt(localStorage.getItem('teamux_contrast') || '100', 10), // 50% to 150% (default 100)
+  saturation: parseInt(localStorage.getItem('teamux_saturation') || '100', 10), // 0% to 200% (default 100)
+  shadows: parseInt(localStorage.getItem('teamux_shadows') || '0', 10), // -50 to +50 (default 0)
+  ambience: parseInt(localStorage.getItem('teamux_ambience') || '0', 10), // 0 to 100 (default 0)
+
+  activeTab: localStorage.getItem('teamux_active_tab') || 'retouch', // 'retouch' or 'tone'
   isComparing: false, // when user is holding "Hold to Compare"
   activeVideoStream: null
 };
@@ -21,6 +31,12 @@ function saveStudioSettings() {
   localStorage.setItem('teamux_beauty_level', String(studioState.beautyLevel));
   localStorage.setItem('teamux_light_enabled', studioState.studioLightEnabled ? 'true' : 'false');
   localStorage.setItem('teamux_vignette_enabled', studioState.vignetteEnabled ? 'true' : 'false');
+  localStorage.setItem('teamux_grayscale_enabled', studioState.grayscaleEnabled ? 'true' : 'false');
+  localStorage.setItem('teamux_contrast', String(studioState.contrast));
+  localStorage.setItem('teamux_saturation', String(studioState.saturation));
+  localStorage.setItem('teamux_shadows', String(studioState.shadows));
+  localStorage.setItem('teamux_ambience', String(studioState.ambience));
+  localStorage.setItem('teamux_active_tab', studioState.activeTab);
 }
 
 // -------------------------------------------------------------
@@ -118,30 +134,96 @@ if (origGetUserMedia) {
         cachedVignette = null; // Rebuild vignette on resize
       }
 
-      const isBeautyActive = studioState.beautyEnabled && !studioState.isComparing;
+      const hasToneAdjustments = studioState.grayscaleEnabled ||
+                                 studioState.contrast !== 100 ||
+                                 studioState.saturation !== 100 ||
+                                 studioState.shadows !== 0 ||
+                                 studioState.ambience !== 0;
 
-      if (isBeautyActive) {
-        // --- BEAUTY FILTER PIPELINE ---
-        // Step A: Base Layer with Studio Lighting & Warmth
+      const isProcessingActive = (studioState.beautyEnabled ||
+                                  hasToneAdjustments ||
+                                  studioState.studioLightEnabled ||
+                                  studioState.vignetteEnabled) && !studioState.isComparing;
+
+      if (isProcessingActive) {
+        // --- REAL-TIME STUDIO & BEAUTY FILTER PIPELINE ---
+        // 1. Calculate combined filter parameters
+        let cVal = studioState.contrast; // 50 to 150
+        let sVal = studioState.saturation; // 0 to 200
+        let bVal = 100; // Base brightness
+
         if (studioState.studioLightEnabled) {
-          ctx.filter = 'brightness(107%) contrast(104%) saturate(106%)';
-        } else {
-          ctx.filter = 'contrast(102%)';
+          bVal += 6;
+          cVal = Math.round(cVal * 1.03);
+          sVal = Math.round(sVal * 1.04);
         }
+
+        // Shadow adjustment:
+        // Lifting shadows (+shadows) lifts darker tones by gently increasing base exposure
+        // and reducing harsh shadows, while -shadows deepens blacks.
+        if (studioState.shadows !== 0) {
+          bVal += Math.round(studioState.shadows * 0.30); // -15% to +15%
+          cVal = Math.round(cVal * (1 - studioState.shadows * 0.0018));
+        }
+
+        // Ambience adjustment:
+        // Ambience adds balanced radiance and a hint of warm golden hour tone
+        if (studioState.ambience > 0) {
+          bVal += Math.round(studioState.ambience * 0.07);
+        }
+
+        const filterParts = [];
+        if (bVal !== 100) filterParts.push(`brightness(${bVal}%)`);
+        if (cVal !== 100) filterParts.push(`contrast(${cVal}%)`);
+        if (studioState.grayscaleEnabled) {
+          filterParts.push('grayscale(100%)');
+        } else {
+          if (sVal !== 100) filterParts.push(`saturate(${sVal}%)`);
+          if (studioState.ambience > 0) {
+            const sepiaPct = Math.round((studioState.ambience / 100) * 16);
+            if (sepiaPct > 0) filterParts.push(`sepia(${sepiaPct}%)`);
+          }
+        }
+
+        // Step A: Base Render with Tone & Color Filters
+        ctx.filter = filterParts.length > 0 ? filterParts.join(' ') : 'none';
         ctx.globalAlpha = 1.0;
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
         // Step B: Edge-Preserved Soft-Focus Skin Smoothing Overlay
-        const levelNorm = studioState.beautyLevel / 100;
-        const blurRadius = Math.max(2, Math.round(levelNorm * 7)); // 2px to 7px
-        const overlayAlpha = Math.min(0.55, 0.15 + (levelNorm * 0.38)); // 15% to 53% opacity
+        if (studioState.beautyEnabled) {
+          const levelNorm = studioState.beautyLevel / 100;
+          const blurRadius = Math.max(2, Math.round(levelNorm * 7)); // 2px to 7px
+          const overlayAlpha = Math.min(0.55, 0.15 + (levelNorm * 0.38)); // 15% to 53% opacity
 
-        ctx.filter = `blur(${blurRadius}px)`;
-        ctx.globalAlpha = overlayAlpha;
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          ctx.filter = `blur(${blurRadius}px)`;
+          ctx.globalAlpha = overlayAlpha;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        }
 
-        // Step C: Portrait Focus / Backdrop Vignette (Cached gradient)
+        // Step C: Ambient Lighting & Shadow Fill Light
+        if (studioState.shadows > 10 && !studioState.grayscaleEnabled) {
+          ctx.filter = 'none';
+          ctx.globalCompositeOperation = 'screen';
+          ctx.fillStyle = `rgba(180, 195, 215, ${(studioState.shadows / 100) * 0.14})`;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.globalCompositeOperation = 'source-over';
+        }
+
+        // Step D: Warm Ambient Light Glow (Ambience > 20)
+        if (studioState.ambience > 20 && !studioState.grayscaleEnabled) {
+          ctx.filter = 'none';
+          ctx.globalCompositeOperation = 'soft-light';
+          const ambAlpha = (studioState.ambience / 100) * 0.22;
+          ctx.fillStyle = `rgba(255, 232, 204, ${ambAlpha})`;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.globalCompositeOperation = 'source-over';
+        }
+
+        // Step E: Portrait Focus / Backdrop Vignette (Cached gradient)
         if (studioState.vignetteEnabled) {
+          ctx.filter = 'none';
+          ctx.globalCompositeOperation = 'source-over';
           if (!cachedVignette || vignetteW !== canvas.width || vignetteH !== canvas.height) {
             vignetteW = canvas.width;
             vignetteH = canvas.height;
@@ -159,10 +241,12 @@ if (origGetUserMedia) {
         // Reset canvas context
         ctx.filter = 'none';
         ctx.globalAlpha = 1.0;
+        ctx.globalCompositeOperation = 'source-over';
       } else {
         // --- RAW CAMERA PASSTHROUGH (Or "Hold to Compare" mode) ---
         ctx.filter = 'none';
         ctx.globalAlpha = 1.0;
+        ctx.globalCompositeOperation = 'source-over';
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
         // If user is actively holding "Compare", display temporary A/B label badge
@@ -232,7 +316,7 @@ if (origGetDisplayMedia) {
 }
 
 // -------------------------------------------------------------
-// 4. In-Meeting Floating Studio Widget (Beauty Cam Controller)
+// 4. In-Meeting Floating Studio Widget (Beauty Cam & Pro Color Controller)
 // -------------------------------------------------------------
 function injectStudioUI() {
   if (document.getElementById('teamux-studio-widget')) return;
@@ -254,7 +338,7 @@ function injectStudioUI() {
       backdrop-filter: blur(16px);
       border: 1px solid rgba(99, 102, 241, 0.45);
       border-radius: 12px;
-      width: 290px;
+      width: 300px;
       box-shadow: 0 12px 32px rgba(0,0,0,0.65);
       color: #f4f4f5;
       overflow: hidden;
@@ -292,11 +376,46 @@ function injectStudioUI() {
       background: rgba(255,255,255,0.1);
       color: white;
     }
+    .teamux-studio-tabs {
+      display: flex;
+      background: rgba(30, 30, 36, 0.85);
+      border-bottom: 1px solid rgba(63, 63, 70, 0.5);
+    }
+    .teamux-studio-tab {
+      flex: 1;
+      padding: 8px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      text-align: center;
+      background: transparent;
+      border: none;
+      color: #a1a1aa;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s ease;
+    }
+    .teamux-studio-tab.active {
+      color: #818cf8;
+      border-bottom-color: #6366f1;
+      background: rgba(99, 102, 241, 0.08);
+    }
+    .teamux-studio-tab:hover:not(.active) {
+      color: #e4e4e7;
+      background: rgba(255, 255, 255, 0.04);
+    }
     .teamux-studio-body {
-      padding: 14px;
+      padding: 13px 14px;
       display: flex;
       flex-direction: column;
       gap: 12px;
+    }
+    .teamux-tab-pane {
+      display: flex;
+      flex-direction: column;
+      gap: 11px;
+    }
+    .teamux-tab-pane.hidden {
+      display: none;
     }
     .teamux-toggle-row {
       display: flex;
@@ -380,6 +499,27 @@ function injectStudioUI() {
       background: #4338ca;
       border-color: #6366f1;
       color: white;
+    }
+    .teamux-btn-reset {
+      background: #1f1f23;
+      border: 1px solid #3f3f46;
+      color: #a1a1aa;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      transition: all 0.15s ease;
+      margin-top: 2px;
+    }
+    .teamux-btn-reset:hover {
+      background: #27272a;
+      color: #ffffff;
+      border-color: #52525b;
     }
     .teamux-studio-pill {
       display: flex;
@@ -469,6 +609,34 @@ function injectStudioUI() {
     return row;
   }
 
+  function createRangeGroup(labelText, inputId, valId, min, max, val, unit) {
+    const group = document.createElement('div');
+    group.className = 'teamux-range-group';
+    group.id = `${inputId}-group`;
+
+    const labelRow = document.createElement('div');
+    labelRow.className = 'teamux-range-label';
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = labelText;
+    const valSpan = document.createElement('span');
+    valSpan.id = valId;
+    valSpan.textContent = `${unit === '+/-' && val > 0 ? '+' : ''}${val}${unit === '+/-' ? '' : unit}`;
+    labelRow.appendChild(nameSpan);
+    labelRow.appendChild(valSpan);
+
+    const rangeInput = document.createElement('input');
+    rangeInput.type = 'range';
+    rangeInput.id = inputId;
+    rangeInput.className = 'teamux-range-input';
+    rangeInput.min = String(min);
+    rangeInput.max = String(max);
+    rangeInput.value = String(val);
+
+    group.appendChild(labelRow);
+    group.appendChild(rangeInput);
+    return { group, rangeInput, valSpan };
+  }
+
   // 1. Studio Widget Container
   const container = document.createElement('div');
   container.id = 'teamux-studio-widget';
@@ -494,56 +662,95 @@ function injectStudioUI() {
   header.appendChild(minBtn);
   card.appendChild(header);
 
+  // Tabs Bar
+  const tabsBar = document.createElement('div');
+  tabsBar.className = 'teamux-studio-tabs';
+
+  const tabRetouch = document.createElement('button');
+  tabRetouch.className = `teamux-studio-tab ${studioState.activeTab === 'retouch' ? 'active' : ''}`;
+  tabRetouch.type = 'button';
+  tabRetouch.textContent = '✨ Retouch';
+
+  const tabTone = document.createElement('button');
+  tabTone.className = `teamux-studio-tab ${studioState.activeTab === 'tone' ? 'active' : ''}`;
+  tabTone.type = 'button';
+  tabTone.textContent = '🎨 Tone & Color';
+
+  tabsBar.appendChild(tabRetouch);
+  tabsBar.appendChild(tabTone);
+  card.appendChild(tabsBar);
+
   // Body
   const body = document.createElement('div');
   body.className = 'teamux-studio-body';
 
+  // --- TAB PANE 1: RETOUCH ---
+  const paneRetouch = document.createElement('div');
+  paneRetouch.className = `teamux-tab-pane ${studioState.activeTab === 'retouch' ? '' : 'hidden'}`;
+
   // Beauty Filter Row
-  body.appendChild(createToggleRow('Beauty Filter', 'teamux-toggle-beauty', studioState.beautyEnabled));
+  paneRetouch.appendChild(createToggleRow('Beauty Filter', 'teamux-toggle-beauty', studioState.beautyEnabled));
 
-  // Range Group (Smoothness)
-  const levelGroup = document.createElement('div');
-  levelGroup.className = 'teamux-range-group';
-  levelGroup.id = 'teamux-level-group';
+  // Smoothness Range
+  const smoothGroup = createRangeGroup('Smoothness', 'teamux-range-level', 'teamux-level-val', 10, 100, studioState.beautyLevel, '%');
   if (!studioState.beautyEnabled) {
-    levelGroup.style.opacity = '0.4';
-    levelGroup.style.pointerEvents = 'none';
+    smoothGroup.group.style.opacity = '0.4';
+    smoothGroup.group.style.pointerEvents = 'none';
   }
-  const labelRow = document.createElement('div');
-  labelRow.className = 'teamux-range-label';
-  const smoothLabel = document.createElement('span');
-  smoothLabel.textContent = 'Smoothness';
-  const smoothVal = document.createElement('span');
-  smoothVal.id = 'teamux-level-val';
-  smoothVal.textContent = `${studioState.beautyLevel}%`;
-  labelRow.appendChild(smoothLabel);
-  labelRow.appendChild(smoothVal);
-
-  const rangeInput = document.createElement('input');
-  rangeInput.type = 'range';
-  rangeInput.id = 'teamux-range-level';
-  rangeInput.className = 'teamux-range-input';
-  rangeInput.min = '10';
-  rangeInput.max = '100';
-  rangeInput.value = String(studioState.beautyLevel);
-
-  levelGroup.appendChild(labelRow);
-  levelGroup.appendChild(rangeInput);
-  body.appendChild(levelGroup);
+  paneRetouch.appendChild(smoothGroup.group);
 
   // Studio Lighting Row
-  body.appendChild(createToggleRow('Studio Lighting', 'teamux-toggle-light', studioState.studioLightEnabled));
+  paneRetouch.appendChild(createToggleRow('Studio Lighting', 'teamux-toggle-light', studioState.studioLightEnabled));
 
   // Portrait Focus Row
-  body.appendChild(createToggleRow('Portrait Focus (Vignette)', 'teamux-toggle-vignette', studioState.vignetteEnabled));
+  paneRetouch.appendChild(createToggleRow('Portrait Focus (Vignette)', 'teamux-toggle-vignette', studioState.vignetteEnabled));
 
   // Hint Box
   const hintBox = document.createElement('div');
   hintBox.className = 'teamux-hint-box';
   hintBox.textContent = '💡 Custom BG & Blur: Supported natively in Teams meeting under More > Video effects.';
-  body.appendChild(hintBox);
+  paneRetouch.appendChild(hintBox);
 
-  // Compare Button
+  body.appendChild(paneRetouch);
+
+  // --- TAB PANE 2: TONE & COLOR ---
+  const paneTone = document.createElement('div');
+  paneTone.className = `teamux-tab-pane ${studioState.activeTab === 'tone' ? '' : 'hidden'}`;
+
+  // Grayscale / B&W Toggle
+  paneTone.appendChild(createToggleRow('Grayscale (Black & White)', 'teamux-toggle-grayscale', studioState.grayscaleEnabled));
+
+  // Contrast Slider (50% to 150%)
+  const contrastGroup = createRangeGroup('Contrast', 'teamux-range-contrast', 'teamux-contrast-val', 50, 150, studioState.contrast, '%');
+  paneTone.appendChild(contrastGroup.group);
+
+  // Saturation Slider (0% to 200%)
+  const satGroup = createRangeGroup('Saturation', 'teamux-range-sat', 'teamux-sat-val', 0, 200, studioState.saturation, '%');
+  if (studioState.grayscaleEnabled) {
+    satGroup.group.style.opacity = '0.4';
+    satGroup.group.style.pointerEvents = 'none';
+  }
+  paneTone.appendChild(satGroup.group);
+
+  // Shadows Slider (-50 to +50)
+  const shadowsGroup = createRangeGroup('Shadow Lift', 'teamux-range-shadows', 'teamux-shadows-val', -50, 50, studioState.shadows, '+/-');
+  paneTone.appendChild(shadowsGroup.group);
+
+  // Ambience Slider (0% to 100%)
+  const ambienceGroup = createRangeGroup('Ambience (Warm Glow)', 'teamux-range-ambience', 'teamux-ambience-val', 0, 100, studioState.ambience, '%');
+  paneTone.appendChild(ambienceGroup.group);
+
+  // Reset Tone Button
+  const btnResetTone = document.createElement('button');
+  btnResetTone.id = 'teamux-btn-reset-tone';
+  btnResetTone.className = 'teamux-btn-reset';
+  btnResetTone.type = 'button';
+  btnResetTone.textContent = '↺ Reset Tone Adjustments';
+  paneTone.appendChild(btnResetTone);
+
+  body.appendChild(paneTone);
+
+  // Common: Compare Button (always at the bottom)
   const btnCompare = document.createElement('button');
   btnCompare.id = 'teamux-btn-compare';
   btnCompare.className = 'teamux-btn-compare';
@@ -586,40 +793,116 @@ function injectStudioUI() {
   callBanner.addEventListener('click', () => {
     ipcRenderer.send('bring-all-to-front');
 
-    // Attempt to trigger Teams internal return to call button if in view
     const teamsReturnBtn = document.querySelector('[data-tid="return-to-call-button"], [aria-label*="Return to call"], [aria-label*="Back to call"]');
     if (teamsReturnBtn) {
       teamsReturnBtn.click();
     }
   });
 
-  // Event Listeners for Studio Widget
+  // Tab switching events
+  tabRetouch.addEventListener('click', () => {
+    tabRetouch.classList.add('active');
+    tabTone.classList.remove('active');
+    paneRetouch.classList.remove('hidden');
+    paneTone.classList.add('hidden');
+    studioState.activeTab = 'retouch';
+    saveStudioSettings();
+  });
+
+  tabTone.addEventListener('click', () => {
+    tabTone.classList.add('active');
+    tabRetouch.classList.remove('active');
+    paneTone.classList.remove('hidden');
+    paneRetouch.classList.add('hidden');
+    studioState.activeTab = 'tone';
+    saveStudioSettings();
+  });
+
+  // Retouch Event Listeners
   const toggleBeauty = container.querySelector('#teamux-toggle-beauty');
-  const rangeLevel = container.querySelector('#teamux-range-level');
-  const levelVal = container.querySelector('#teamux-level-val');
   const toggleLight = container.querySelector('#teamux-toggle-light');
   const toggleVignette = container.querySelector('#teamux-toggle-vignette');
 
   toggleBeauty?.addEventListener('change', () => {
     studioState.beautyEnabled = toggleBeauty.checked;
-    levelGroup.style.opacity = studioState.beautyEnabled ? '1' : '0.4';
-    levelGroup.style.pointerEvents = studioState.beautyEnabled ? 'auto' : 'none';
+    smoothGroup.group.style.opacity = studioState.beautyEnabled ? '1' : '0.4';
+    smoothGroup.group.style.pointerEvents = studioState.beautyEnabled ? 'auto' : 'none';
     saveStudioSettings();
   });
 
-  rangeLevel.addEventListener('input', () => {
-    studioState.beautyLevel = parseInt(rangeLevel.value, 10);
-    levelVal.textContent = `${studioState.beautyLevel}%`;
+  smoothGroup.rangeInput.addEventListener('input', () => {
+    studioState.beautyLevel = parseInt(smoothGroup.rangeInput.value, 10);
+    smoothGroup.valSpan.textContent = `${studioState.beautyLevel}%`;
     saveStudioSettings();
   });
 
-  toggleLight.addEventListener('change', () => {
+  toggleLight?.addEventListener('change', () => {
     studioState.studioLightEnabled = toggleLight.checked;
     saveStudioSettings();
   });
 
   toggleVignette?.addEventListener('change', () => {
     studioState.vignetteEnabled = toggleVignette.checked;
+    saveStudioSettings();
+  });
+
+  // Tone & Color Event Listeners
+  const toggleGrayscale = container.querySelector('#teamux-toggle-grayscale');
+
+  toggleGrayscale?.addEventListener('change', () => {
+    studioState.grayscaleEnabled = toggleGrayscale.checked;
+    satGroup.group.style.opacity = studioState.grayscaleEnabled ? '0.4' : '1';
+    satGroup.group.style.pointerEvents = studioState.grayscaleEnabled ? 'none' : 'auto';
+    saveStudioSettings();
+  });
+
+  contrastGroup.rangeInput.addEventListener('input', () => {
+    studioState.contrast = parseInt(contrastGroup.rangeInput.value, 10);
+    contrastGroup.valSpan.textContent = `${studioState.contrast}%`;
+    saveStudioSettings();
+  });
+
+  satGroup.rangeInput.addEventListener('input', () => {
+    studioState.saturation = parseInt(satGroup.rangeInput.value, 10);
+    satGroup.valSpan.textContent = `${studioState.saturation}%`;
+    saveStudioSettings();
+  });
+
+  shadowsGroup.rangeInput.addEventListener('input', () => {
+    studioState.shadows = parseInt(shadowsGroup.rangeInput.value, 10);
+    shadowsGroup.valSpan.textContent = `${studioState.shadows > 0 ? '+' : ''}${studioState.shadows}`;
+    saveStudioSettings();
+  });
+
+  ambienceGroup.rangeInput.addEventListener('input', () => {
+    studioState.ambience = parseInt(ambienceGroup.rangeInput.value, 10);
+    ambienceGroup.valSpan.textContent = `${studioState.ambience}%`;
+    saveStudioSettings();
+  });
+
+  btnResetTone.addEventListener('click', () => {
+    studioState.grayscaleEnabled = false;
+    studioState.contrast = 100;
+    studioState.saturation = 100;
+    studioState.shadows = 0;
+    studioState.ambience = 0;
+
+    if (toggleGrayscale) toggleGrayscale.checked = false;
+    satGroup.group.style.opacity = '1';
+    satGroup.group.style.pointerEvents = 'auto';
+
+    contrastGroup.rangeInput.value = '100';
+    contrastGroup.valSpan.textContent = '100%';
+
+    satGroup.rangeInput.value = '100';
+    satGroup.valSpan.textContent = '100%';
+
+    shadowsGroup.rangeInput.value = '0';
+    shadowsGroup.valSpan.textContent = '0';
+
+    ambienceGroup.rangeInput.value = '0';
+    ambienceGroup.valSpan.textContent = '0%';
+
     saveStudioSettings();
   });
 
