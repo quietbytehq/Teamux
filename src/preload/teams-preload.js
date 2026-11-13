@@ -21,7 +21,7 @@ const studioState = {
   shadows: parseInt(localStorage.getItem('teamux_shadows') || '0', 10), // -50 to +50 (default 0)
   ambience: parseInt(localStorage.getItem('teamux_ambience') || '0', 10), // 0 to 100 (default 0)
 
-  activeTab: localStorage.getItem('teamux_active_tab') || 'retouch', // 'retouch' or 'tone'
+  activeTab: localStorage.getItem('teamux_active_tab') || 'retouch', // 'retouch', 'tone', or 'themes'
   isComparing: false, // when user is holding "Hold to Compare"
   activeVideoStream: null
 };
@@ -38,6 +38,381 @@ function saveStudioSettings() {
   localStorage.setItem('teamux_ambience', String(studioState.ambience));
   localStorage.setItem('teamux_active_tab', studioState.activeTab);
 }
+
+// -------------------------------------------------------------
+// 1b. App Themes Engine (Fluent UI v9 & Modern Interface Themes)
+// -------------------------------------------------------------
+const THEMES = {
+  default: {
+    id: 'default',
+    name: 'Teams Default',
+    emoji: '🖥️',
+    description: 'Microsoft Teams native appearance',
+    swatches: ['#201f1f', '#2d2c2c', '#6264a7']
+  },
+  oled: {
+    id: 'oled',
+    name: 'OLED Midnight',
+    emoji: '🌌',
+    description: 'True pitch black with neon electric blue',
+    swatches: ['#000000', '#121212', '#38bdf8'],
+    vars: {
+      bg1: '#000000',
+      bg2: '#080808',
+      bg3: '#121212',
+      bg4: '#1a1a1a',
+      subtle: 'rgba(255, 255, 255, 0.04)',
+      subtleHover: 'rgba(255, 255, 255, 0.08)',
+      subtlePressed: 'rgba(255, 255, 255, 0.12)',
+      brand: '#38bdf8',
+      brandHover: '#60a5fa',
+      brandPressed: '#0284c7',
+      brandFg: '#38bdf8',
+      fg1: '#ffffff',
+      fg2: '#a3a3a3',
+      fg3: '#737373',
+      fg4: '#525252',
+      stroke1: '#262626',
+      stroke2: '#1a1a1a',
+      strokeSubtle: '#141414',
+      shadow: 'rgba(0, 0, 0, 0.9)'
+    }
+  },
+  catppuccin: {
+    id: 'catppuccin',
+    name: 'Catppuccin Mocha',
+    emoji: '☕',
+    description: 'Soothing developer pastel & mauve',
+    swatches: ['#1e1e2e', '#313244', '#cba6f7'],
+    vars: {
+      bg1: '#1e1e2e',
+      bg2: '#181825',
+      bg3: '#313244',
+      bg4: '#45475a',
+      subtle: 'rgba(205, 214, 244, 0.05)',
+      subtleHover: 'rgba(205, 214, 244, 0.09)',
+      subtlePressed: 'rgba(205, 214, 244, 0.14)',
+      brand: '#cba6f7',
+      brandHover: '#b4befe',
+      brandPressed: '#a6e3a1',
+      brandFg: '#cba6f7',
+      fg1: '#cdd6f4',
+      fg2: '#bac2de',
+      fg3: '#a6adc8',
+      fg4: '#6c7086',
+      stroke1: '#313244',
+      stroke2: '#45475a',
+      strokeSubtle: '#26283b',
+      shadow: 'rgba(17, 17, 27, 0.8)'
+    }
+  },
+  nord: {
+    id: 'nord',
+    name: 'Nord Frost',
+    emoji: '❄️',
+    description: 'Arctic slates & crisp polar cyan',
+    swatches: ['#2e3440', '#3b4252', '#88c0d0'],
+    vars: {
+      bg1: '#2e3440',
+      bg2: '#242933',
+      bg3: '#3b4252',
+      bg4: '#434c5e',
+      subtle: 'rgba(236, 239, 244, 0.05)',
+      subtleHover: 'rgba(236, 239, 244, 0.09)',
+      subtlePressed: 'rgba(236, 239, 244, 0.14)',
+      brand: '#88c0d0',
+      brandHover: '#81a1c1',
+      brandPressed: '#5e81ac',
+      brandFg: '#88c0d0',
+      fg1: '#eceff4',
+      fg2: '#e5e9f0',
+      fg3: '#d8dee9',
+      fg4: '#4c566a',
+      stroke1: '#434c5e',
+      stroke2: '#4c566a',
+      strokeSubtle: '#3b4252',
+      shadow: 'rgba(36, 41, 51, 0.8)'
+    }
+  },
+  tokyo: {
+    id: 'tokyo',
+    name: 'Tokyo Night',
+    emoji: '🌆',
+    description: 'Deep navy twilight & neon cyan/magenta',
+    swatches: ['#1a1b26', '#24283b', '#7dcfff'],
+    vars: {
+      bg1: '#1a1b26',
+      bg2: '#16161e',
+      bg3: '#24283b',
+      bg4: '#292e42',
+      subtle: 'rgba(192, 202, 245, 0.05)',
+      subtleHover: 'rgba(192, 202, 245, 0.09)',
+      subtlePressed: 'rgba(192, 202, 245, 0.14)',
+      brand: '#7dcfff',
+      brandHover: '#bb9af7',
+      brandPressed: '#7aa2f7',
+      brandFg: '#7dcfff',
+      fg1: '#c0caf5',
+      fg2: '#a9b1d6',
+      fg3: '#787c99',
+      fg4: '#565f89',
+      stroke1: '#292e42',
+      stroke2: '#3b4261',
+      strokeSubtle: '#1f2335',
+      shadow: 'rgba(22, 22, 30, 0.85)'
+    }
+  },
+  dracula: {
+    id: 'dracula',
+    name: 'Dracula',
+    emoji: '🧛',
+    description: 'Vampire dark slate & vibrant neon pink',
+    swatches: ['#282a36', '#44475a', '#ff79c6'],
+    vars: {
+      bg1: '#282a36',
+      bg2: '#1e1f29',
+      bg3: '#44475a',
+      bg4: '#6272a4',
+      subtle: 'rgba(248, 248, 242, 0.05)',
+      subtleHover: 'rgba(248, 248, 242, 0.09)',
+      subtlePressed: 'rgba(248, 248, 242, 0.14)',
+      brand: '#ff79c6',
+      brandHover: '#bd93f9',
+      brandPressed: '#8be9fd',
+      brandFg: '#ff79c6',
+      fg1: '#f8f8f2',
+      fg2: '#d6d6d4',
+      fg3: '#6272a4',
+      fg4: '#44475a',
+      stroke1: '#44475a',
+      stroke2: '#6272a4',
+      strokeSubtle: '#282a36',
+      shadow: 'rgba(30, 31, 41, 0.85)'
+    }
+  },
+  rose: {
+    id: 'rose',
+    name: 'Rosé Pine',
+    emoji: '🌸',
+    description: 'Cozy warm dusk & delicate rose gold',
+    swatches: ['#191724', '#26233a', '#ebbcba'],
+    vars: {
+      bg1: '#191724',
+      bg2: '#14121e',
+      bg3: '#26233a',
+      bg4: '#403d52',
+      subtle: 'rgba(224, 222, 244, 0.05)',
+      subtleHover: 'rgba(224, 222, 244, 0.09)',
+      subtlePressed: 'rgba(224, 222, 244, 0.14)',
+      brand: '#ebbcba',
+      brandHover: '#f6c177',
+      brandPressed: '#31748f',
+      brandFg: '#ebbcba',
+      fg1: '#e0def4',
+      fg2: '#908caa',
+      fg3: '#6e6a86',
+      fg4: '#524f67',
+      stroke1: '#26233a',
+      stroke2: '#403d52',
+      strokeSubtle: '#1f1d2e',
+      shadow: 'rgba(20, 18, 30, 0.85)'
+    }
+  }
+};
+
+let currentTheme = localStorage.getItem('teamux_theme') || 'default';
+
+function generateThemeCSS(themeKey) {
+  const theme = THEMES[themeKey];
+  if (!theme || !theme.vars) return '';
+  const v = theme.vars;
+
+  return `
+    :root, [data-theme], body, #root, #app, .fui-FluentProvider {
+      --colorNeutralBackground1: ${v.bg1} !important;
+      --colorNeutralBackground1Hover: ${v.bg2} !important;
+      --colorNeutralBackground1Pressed: ${v.bg3} !important;
+      --colorNeutralBackground1Selected: ${v.bg2} !important;
+
+      --colorNeutralBackground2: ${v.bg2} !important;
+      --colorNeutralBackground2Hover: ${v.bg3} !important;
+      --colorNeutralBackground2Pressed: ${v.bg1} !important;
+      --colorNeutralBackground2Selected: ${v.bg3} !important;
+
+      --colorNeutralBackground3: ${v.bg3} !important;
+      --colorNeutralBackground3Hover: ${v.bg4} !important;
+      --colorNeutralBackground3Pressed: ${v.bg2} !important;
+      --colorNeutralBackground3Selected: ${v.bg4} !important;
+
+      --colorNeutralBackground4: ${v.bg4} !important;
+      --colorNeutralBackground5: ${v.bg4} !important;
+      --colorNeutralBackground6: ${v.bg3} !important;
+
+      --colorNeutralBackgroundAlpha: ${v.subtle} !important;
+      --colorNeutralBackgroundAlpha2: ${v.subtleHover} !important;
+
+      --colorSubtleBackground: transparent !important;
+      --colorSubtleBackgroundHover: ${v.subtleHover} !important;
+      --colorSubtleBackgroundPressed: ${v.subtlePressed} !important;
+      --colorSubtleBackgroundSelected: ${v.subtleHover} !important;
+
+      --colorTransparentBackground: transparent !important;
+      --colorTransparentBackgroundHover: ${v.subtleHover} !important;
+      --colorTransparentBackgroundPressed: ${v.subtlePressed} !important;
+      --colorTransparentBackgroundSelected: ${v.subtleHover} !important;
+
+      --colorBrandBackground: ${v.brand} !important;
+      --colorBrandBackgroundHover: ${v.brandHover} !important;
+      --colorBrandBackgroundPressed: ${v.brandPressed} !important;
+      --colorBrandBackgroundSelected: ${v.brand} !important;
+      --colorBrandBackground2: ${v.brand} !important;
+
+      --colorBrandForeground1: ${v.brandFg} !important;
+      --colorBrandForeground2: ${v.brandFg} !important;
+      --colorBrandForegroundInverted: ${v.bg1} !important;
+      --colorBrandStroke1: ${v.brand} !important;
+      --colorBrandStroke2: ${v.brandHover} !important;
+
+      --colorNeutralForeground1: ${v.fg1} !important;
+      --colorNeutralForeground1Hover: ${v.fg1} !important;
+      --colorNeutralForeground1Pressed: ${v.fg1} !important;
+      --colorNeutralForeground1Selected: ${v.fg1} !important;
+
+      --colorNeutralForeground2: ${v.fg2} !important;
+      --colorNeutralForeground2Hover: ${v.fg1} !important;
+      --colorNeutralForeground2Pressed: ${v.fg1} !important;
+      --colorNeutralForeground2Selected: ${v.fg1} !important;
+
+      --colorNeutralForeground3: ${v.fg3} !important;
+      --colorNeutralForeground3Hover: ${v.fg2} !important;
+      --colorNeutralForeground4: ${v.fg4} !important;
+      --colorNeutralForegroundDisabled: ${v.fg4} !important;
+      --colorNeutralForegroundInverted: ${v.bg1} !important;
+      --colorNeutralForegroundOnBrand: #ffffff !important;
+
+      --colorNeutralStroke1: ${v.stroke1} !important;
+      --colorNeutralStroke1Hover: ${v.stroke2} !important;
+      --colorNeutralStroke1Pressed: ${v.strokeSubtle} !important;
+      --colorNeutralStroke1Selected: ${v.stroke2} !important;
+
+      --colorNeutralStroke2: ${v.stroke2} !important;
+      --colorNeutralStroke3: ${v.strokeSubtle} !important;
+      --colorNeutralStrokeSubtle: ${v.strokeSubtle} !important;
+
+      --colorStrokeFocus1: #ffffff !important;
+      --colorStrokeFocus2: ${v.brand} !important;
+
+      --shadow4: 0 2px 4px ${v.shadow} !important;
+      --shadow8: 0 4px 8px ${v.shadow} !important;
+      --shadow16: 0 8px 16px ${v.shadow} !important;
+      --shadow28: 0 14px 28px ${v.shadow} !important;
+    }
+
+    html, body, #root, #app, [data-tid="app-layout"], [class*="app-layout"] {
+      background-color: ${v.bg1} !important;
+      color: ${v.fg1} !important;
+    }
+
+    header, [data-tid="app-header"], .fui-Toolbar, [class*="app-header"] {
+      background-color: ${v.bg2} !important;
+      border-bottom: 1px solid ${v.stroke1} !important;
+    }
+
+    [data-tid="app-bar"], nav[aria-label*="App bar"], [class*="app-bar"], [data-tid="app-bar-items"] {
+      background-color: ${v.bg2} !important;
+      border-right: 1px solid ${v.stroke1} !important;
+    }
+
+    [data-tid="chat-list"], [data-tid="team-list"], [data-tid="channel-list"], [class*="chat-list"] {
+      background-color: ${v.bg2} !important;
+      border-right: 1px solid ${v.stroke1} !important;
+    }
+
+    [data-tid*="chat-list-item"][aria-selected="true"],
+    [data-tid*="chat-list-item"].active,
+    [data-tid*="channel-list-item"][aria-selected="true"] {
+      background-color: ${v.bg3} !important;
+      border-left: 3px solid ${v.brand} !important;
+    }
+
+    [data-tid="chat-pane"], [data-tid="message-pane"], [role="main"], [data-tid="team-channel-pane"] {
+      background-color: ${v.bg1} !important;
+    }
+
+    [data-tid="search-input"], [data-tid="search-box"], input[placeholder*="Search"] {
+      background-color: ${v.bg3} !important;
+      color: ${v.fg1} !important;
+      border: 1px solid ${v.stroke1} !important;
+      border-radius: 8px !important;
+    }
+
+    [data-tid="chat-pane-message"] {
+      background: transparent !important;
+    }
+
+    [class*="chat-message-bubble"], [class*="ui-chat__message__bubble"], [class*="message-body"] {
+      border-radius: 10px !important;
+    }
+
+    [data-tid="chat-input-control"], [data-tid="ckeditor"], [class*="chat-input"], [data-tid="ckeditor-chat-input"] {
+      background-color: ${v.bg3} !important;
+      border-radius: 10px !important;
+      border: 1px solid ${v.stroke1} !important;
+    }
+
+    .fui-PopoverSurface, .fui-MenuPopover, .fui-DialogSurface, [role="menu"], [role="dialog"], [role="listbox"] {
+      background-color: ${v.bg4} !important;
+      color: ${v.fg1} !important;
+      border: 1px solid ${v.stroke1} !important;
+      border-radius: 10px !important;
+      box-shadow: 0 12px 32px ${v.shadow} !important;
+    }
+
+    *::-webkit-scrollbar {
+      width: 6px !important;
+      height: 6px !important;
+    }
+    *::-webkit-scrollbar-track {
+      background: transparent !important;
+    }
+    *::-webkit-scrollbar-thumb {
+      background: ${v.stroke2} !important;
+      border-radius: 6px !important;
+    }
+    *::-webkit-scrollbar-thumb:hover {
+      background: ${v.brand} !important;
+    }
+  `;
+}
+
+function applyTheme(themeKey) {
+  if (!THEMES[themeKey]) themeKey = 'default';
+  currentTheme = themeKey;
+  try {
+    localStorage.setItem('teamux_theme', themeKey);
+  } catch (_) {}
+
+  let styleTag = document.getElementById('teamux-theme-styles');
+  if (!styleTag) {
+    styleTag = document.createElement('style');
+    styleTag.id = 'teamux-theme-styles';
+    const target = document.head || document.documentElement;
+    if (target) {
+      target.appendChild(styleTag);
+    }
+  }
+
+  if (styleTag) {
+    styleTag.textContent = generateThemeCSS(themeKey);
+  }
+}
+
+// Early application at evaluation time
+try {
+  if (typeof document !== 'undefined') {
+    applyTheme(currentTheme);
+  }
+} catch (_) {}
 
 // -------------------------------------------------------------
 // 2. Stream Lifecycle Tracking & Instant Teardown
@@ -338,7 +713,7 @@ function injectStudioUI() {
       backdrop-filter: blur(16px);
       border: 1px solid rgba(99, 102, 241, 0.45);
       border-radius: 12px;
-      width: 300px;
+      width: 325px;
       box-shadow: 0 12px 32px rgba(0,0,0,0.65);
       color: #f4f4f5;
       overflow: hidden;
@@ -383,8 +758,8 @@ function injectStudioUI() {
     }
     .teamux-studio-tab {
       flex: 1;
-      padding: 8px 10px;
-      font-size: 12px;
+      padding: 8px 6px;
+      font-size: 11px;
       font-weight: 600;
       text-align: center;
       background: transparent;
@@ -393,6 +768,7 @@ function injectStudioUI() {
       cursor: pointer;
       border-bottom: 2px solid transparent;
       transition: all 0.15s ease;
+      white-space: nowrap;
     }
     .teamux-studio-tab.active {
       color: #818cf8;
@@ -520,6 +896,81 @@ function injectStudioUI() {
       background: #27272a;
       color: #ffffff;
       border-color: #52525b;
+    }
+    /* Themes Tab Styles */
+    .teamux-theme-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 290px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .teamux-theme-list::-webkit-scrollbar {
+      width: 4px;
+    }
+    .teamux-theme-list::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+    }
+    .teamux-theme-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 10px;
+      background: rgba(36, 36, 42, 0.7);
+      border: 1px solid rgba(63, 63, 70, 0.5);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .teamux-theme-card:hover {
+      background: rgba(63, 63, 70, 0.45);
+      border-color: rgba(129, 140, 248, 0.45);
+    }
+    .teamux-theme-card.active {
+      background: rgba(99, 102, 241, 0.18);
+      border-color: #818cf8;
+      box-shadow: 0 0 10px rgba(99, 102, 241, 0.25);
+    }
+    .teamux-theme-card-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .teamux-theme-card-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #f4f4f5;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .teamux-theme-card-desc {
+      font-size: 10px;
+      color: #a1a1aa;
+    }
+    .teamux-theme-swatches {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .teamux-swatch-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      display: inline-block;
+    }
+    .teamux-theme-badge {
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 10px;
+      background: #4f46e5;
+      color: #ffffff;
+      margin-left: 3px;
     }
     .teamux-studio-pill {
       display: flex;
@@ -674,10 +1125,16 @@ function injectStudioUI() {
   const tabTone = document.createElement('button');
   tabTone.className = `teamux-studio-tab ${studioState.activeTab === 'tone' ? 'active' : ''}`;
   tabTone.type = 'button';
-  tabTone.textContent = '🎨 Tone & Color';
+  tabTone.textContent = '🎨 Tone';
+
+  const tabThemes = document.createElement('button');
+  tabThemes.className = `teamux-studio-tab ${studioState.activeTab === 'themes' ? 'active' : ''}`;
+  tabThemes.type = 'button';
+  tabThemes.textContent = '🎭 Themes';
 
   tabsBar.appendChild(tabRetouch);
   tabsBar.appendChild(tabTone);
+  tabsBar.appendChild(tabThemes);
   card.appendChild(tabsBar);
 
   // Body
@@ -750,13 +1207,96 @@ function injectStudioUI() {
 
   body.appendChild(paneTone);
 
-  // Common: Compare Button (always at the bottom)
+  // --- TAB PANE 3: APP THEMES ---
+  const paneThemes = document.createElement('div');
+  paneThemes.className = `teamux-tab-pane ${studioState.activeTab === 'themes' ? '' : 'hidden'}`;
+
+  const themeNote = document.createElement('div');
+  themeNote.style.cssText = 'font-size:11px; color:#a1a1aa; line-height:1.3; margin-bottom:2px;';
+  themeNote.textContent = 'Select an app theme to customize the look of Teams:';
+  paneThemes.appendChild(themeNote);
+
+  const themeList = document.createElement('div');
+  themeList.className = 'teamux-theme-list';
+
+  const themeCards = [];
+
+  function refreshThemeSelection(selectedKey) {
+    applyTheme(selectedKey);
+    themeCards.forEach(({ key, card, titleRow, badge }) => {
+      if (key === selectedKey) {
+        card.classList.add('active');
+        if (!titleRow.contains(badge)) {
+          titleRow.appendChild(badge);
+        }
+      } else {
+        card.classList.remove('active');
+        if (titleRow.contains(badge)) {
+          titleRow.removeChild(badge);
+        }
+      }
+    });
+  }
+
+  Object.keys(THEMES).forEach((key) => {
+    const t = THEMES[key];
+    const isAct = currentTheme === key;
+
+    const tCard = document.createElement('div');
+    tCard.className = `teamux-theme-card ${isAct ? 'active' : ''}`;
+
+    const tInfo = document.createElement('div');
+    tInfo.className = 'teamux-theme-card-info';
+
+    const tTitleRow = document.createElement('div');
+    tTitleRow.className = 'teamux-theme-card-title';
+    tTitleRow.textContent = `${t.emoji} ${t.name}`;
+
+    const tBadge = document.createElement('span');
+    tBadge.className = 'teamux-theme-badge';
+    tBadge.textContent = 'Active';
+    if (isAct) {
+      tTitleRow.appendChild(tBadge);
+    }
+
+    const tDesc = document.createElement('div');
+    tDesc.className = 'teamux-theme-card-desc';
+    tDesc.textContent = t.description;
+
+    tInfo.appendChild(tTitleRow);
+    tInfo.appendChild(tDesc);
+
+    const tSwatches = document.createElement('div');
+    tSwatches.className = 'teamux-theme-swatches';
+    t.swatches.forEach((color) => {
+      const dot = document.createElement('span');
+      dot.className = 'teamux-swatch-dot';
+      dot.style.backgroundColor = color;
+      tSwatches.appendChild(dot);
+    });
+
+    tCard.appendChild(tInfo);
+    tCard.appendChild(tSwatches);
+
+    tCard.addEventListener('click', () => {
+      refreshThemeSelection(key);
+    });
+
+    themeCards.push({ key, card: tCard, titleRow: tTitleRow, badge: tBadge });
+    themeList.appendChild(tCard);
+  });
+
+  paneThemes.appendChild(themeList);
+  body.appendChild(paneThemes);
+
+  // Common: Compare Button (always at the bottom of retouch/tone tabs)
   const btnCompare = document.createElement('button');
   btnCompare.id = 'teamux-btn-compare';
   btnCompare.className = 'teamux-btn-compare';
   btnCompare.type = 'button';
   btnCompare.title = 'Hold down to temporarily see your raw camera';
   btnCompare.textContent = '👁️ Hold to Compare';
+  btnCompare.style.display = studioState.activeTab === 'themes' ? 'none' : 'flex';
   body.appendChild(btnCompare);
 
   card.appendChild(body);
@@ -803,8 +1343,11 @@ function injectStudioUI() {
   tabRetouch.addEventListener('click', () => {
     tabRetouch.classList.add('active');
     tabTone.classList.remove('active');
+    tabThemes.classList.remove('active');
     paneRetouch.classList.remove('hidden');
     paneTone.classList.add('hidden');
+    paneThemes.classList.add('hidden');
+    btnCompare.style.display = 'flex';
     studioState.activeTab = 'retouch';
     saveStudioSettings();
   });
@@ -812,9 +1355,24 @@ function injectStudioUI() {
   tabTone.addEventListener('click', () => {
     tabTone.classList.add('active');
     tabRetouch.classList.remove('active');
+    tabThemes.classList.remove('active');
     paneTone.classList.remove('hidden');
     paneRetouch.classList.add('hidden');
+    paneThemes.classList.add('hidden');
+    btnCompare.style.display = 'flex';
     studioState.activeTab = 'tone';
+    saveStudioSettings();
+  });
+
+  tabThemes.addEventListener('click', () => {
+    tabThemes.classList.add('active');
+    tabRetouch.classList.remove('active');
+    tabTone.classList.remove('active');
+    paneThemes.classList.remove('hidden');
+    paneRetouch.classList.add('hidden');
+    paneTone.classList.add('hidden');
+    btnCompare.style.display = 'none';
+    studioState.activeTab = 'themes';
     saveStudioSettings();
   });
 
@@ -973,13 +1531,19 @@ window.addEventListener('DOMContentLoaded', () => {
   `;
   document.head.appendChild(style);
 
+  // Apply active theme
+  applyTheme(currentTheme);
+
   // Inject Studio Controller & Call Banner
   injectStudioUI();
 
-  // Watchdog: Ensure studio UI stays attached even if Teams navigates or re-renders DOM
+  // Watchdog: Ensure studio UI and active theme stay attached even if Teams navigates or re-renders DOM
   setInterval(() => {
     if (document.body && !document.getElementById('teamux-studio-widget')) {
       injectStudioUI();
+    }
+    if (!document.getElementById('teamux-theme-styles') && currentTheme !== 'default') {
+      applyTheme(currentTheme);
     }
   }, 1500);
 
