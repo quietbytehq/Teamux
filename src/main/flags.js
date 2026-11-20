@@ -9,10 +9,6 @@ function configureAppFlags(store) {
 
   if (!hardwareAccel) {
     app.disableHardwareAcceleration();
-  } else {
-    // Hardware acceleration optimization for Linux
-    app.commandLine.appendSwitch('ignore-gpu-blocklist');
-    app.commandLine.appendSwitch('enable-gpu-rasterization');
   }
 
   // Ozone Platform hint (Wayland vs X11)
@@ -39,12 +35,13 @@ function configureAppFlags(store) {
   app.commandLine.appendSwitch('disable-domain-reliability');
   app.commandLine.appendSwitch('disable-sync');
 
-  // 4. Features to enable / disable for low footprint and fast media
+  // 4. Features to enable / disable for low footprint, stable Wayland display, and fast media
+  // Note: CanvasOopRasterization and WaylandWindowDecorations are intentionally omitted:
+  // - CanvasOopRasterization causes GPU IPC deadlocks with canvas filter pipelines on hybrid Intel/NVIDIA Linux
+  // - WaylandWindowDecorations breaks on GNOME Wayland which strictly mandates CSD (client-side decorations)
   const enableFeatures = [
     'WebRTCPipeWireCapturer',
-    'WaylandWindowDecorations',
-    'PulseaudioLoopbackForCast',
-    'CanvasOopRasterization' // Off-process canvas rasterization on GPU saves CPU
+    'PulseaudioLoopbackForCast'
   ];
 
   const disableFeatures = [

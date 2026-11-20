@@ -1,7 +1,7 @@
 // src/main/index.js
 // Main process entry point for Teamux
 
-const { app, BrowserWindow, session, ipcMain, shell, screen } = require('electron');
+const { app, BrowserWindow, session, ipcMain, shell, screen, dialog } = require('electron');
 const path = require('path');
 const { SettingsStore } = require('./store');
 const { configureAppFlags } = require('./flags');
@@ -148,20 +148,26 @@ async function createMainWindow() {
   mainWindow.on('resize', saveBounds);
   mainWindow.on('move', saveBounds);
 
-  const trimMemory = () => {
-    try {
-      if (session.defaultSession) {
-        session.defaultSession.clearCodeCaches({}).catch(() => {});
-      }
-    } catch (_) {}
-  };
+  let lastCloseAttempt = 0;
 
-  // Close to tray behavior
+  // Window close behavior
   mainWindow.on('close', (event) => {
-    if (!app.isQuitting && store.get('closeToTray', true)) {
+    if (app.isQuitting) return;
+
+    const now = Date.now();
+    // Escape hatch: If user clicks close twice within 2.5 seconds, force quit immediately
+    if (now - lastCloseAttempt < 2500) {
+      console.log('[Teamux] Double-close detected: exiting application cleanly.');
+      app.isQuitting = true;
+      app.quit();
+      return;
+    }
+    lastCloseAttempt = now;
+
+    const closeToTray = store.get('closeToTray', false);
+    if (closeToTray) {
       event.preventDefault();
       mainWindow.hide();
-      trimMemory();
       return false;
     }
     saveBounds();
@@ -169,21 +175,39 @@ async function createMainWindow() {
 
   // Minimize to tray behavior
   mainWindow.on('minimize', (event) => {
-    if (store.get('minimizeToTray', true)) {
+    if (store.get('minimizeToTray', false)) {
       event.preventDefault();
       mainWindow.hide();
     }
-    trimMemory();
   });
 
-  mainWindow.on('hide', trimMemory);
+  // Crash & Unresponsiveness Watchdogs
+  mainWindow.on('unresponsive', () => {
+    console.warn('[Teamux] Window became unresponsive.');
+    dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      title: 'Teamux Unresponsive',
+      message: 'Microsoft Teams is not responding. Would you like to reload or exit?',
+      buttons: ['Wait', 'Reload Teams', 'Exit Teamux'],
+      defaultId: 1,
+      cancelId: 0
+    }).then(({ response }) => {
+      if (response === 1) {
+        mainWindow.reload();
+      } else if (response === 2) {
+        app.isQuitting = true;
+        app.exit(0);
+      }
+    }).catch(() => {});
+  });
 
-  // Periodic memory trim when window is not focused or is hidden
-  setInterval(() => {
-    if (mainWindow && (!mainWindow.isVisible() || mainWindow.isMinimized())) {
-      trimMemory();
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error('[Teamux] Renderer crashed or exited unexpectedly:', details.reason, 'code:', details.exitCode);
+    if (details.reason !== 'clean-exit' && !app.isQuitting) {
+      console.log('[Teamux] Recovering renderer: reloading Teams...');
+      mainWindow.reload();
     }
-  }, 10 * 60 * 1000);
+  });
 
   mainWindow.on('closed', () => {
     allActiveWindows.delete(mainWindow);
@@ -283,15 +307,45 @@ app.whenReady().then(async () => {
   });
 });
 
+let quitTimeout = null;
+
 app.on('before-quit', () => {
+  app.isQuitting = true;
+  // Fail-safe: ensure process terminates within 1.5s even if a renderer process is unresponsive
+  if (!quitTimeout) {
+    quitTimeout = setTimeout(() => {
+      console.log('[Teamux] Forced termination on quit timeout.');
+      process.exit(0);
+    }, 1500);
+    if (quitTimeout.unref) quitTimeout.unref();
+  }
+});
+
+app.on('will-quit', () => {
   app.isQuitting = true;
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin' && !store.get('closeToTray', true)) {
+  if (process.platform !== 'darwin' && !store.get('closeToTray', false)) {
     app.quit();
   }
 });
+
+const handleTermination = () => {
+  if (app.isQuitting) return;
+  app.isQuitting = true;
+  try {
+    BrowserWindow.getAllWindows().forEach((w) => {
+      try { if (!w.isDestroyed()) w.destroy(); } catch (_) {}
+    });
+    app.quit();
+  } finally {
+    setTimeout(() => process.exit(0), 400).unref();
+  }
+};
+
+process.on('SIGINT', handleTermination);
+process.on('SIGTERM', handleTermination);
 
 // IPC: Unread badge update from preload
 ipcMain.on('unread-badge-update', (_event, count) => {

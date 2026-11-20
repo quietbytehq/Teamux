@@ -11,15 +11,16 @@ class SettingsStore {
     this.configPath = path.join(this.userDataPath, 'teamux-config.json');
     this.defaults = {
       startMinimized: false,
-      minimizeToTray: true,
-      closeToTray: true,
+      minimizeToTray: false,
+      closeToTray: false,
       hardwareAcceleration: true,
       forceWayland: false,
       teamsUrl: 'https://teams.cloud.microsoft/',
       windowBounds: { width: 1280, height: 820 },
       isMaximized: false,
       enableUnreadBadges: true,
-      enableNotifications: true
+      enableNotifications: true,
+      configVersion: 2
     };
     this.data = this.load();
   }
@@ -28,7 +29,15 @@ class SettingsStore {
     try {
       if (fs.existsSync(this.configPath)) {
         const raw = fs.readFileSync(this.configPath, 'utf8');
-        return Object.assign({}, this.defaults, JSON.parse(raw));
+        const parsed = JSON.parse(raw);
+        // Migration: Default closeToTray to false for users upgrading from v0.1/v0.2
+        // so clicking the window close button cleanly exits rather than hanging in the background
+        if (!parsed.configVersion || parsed.configVersion < 2) {
+          parsed.closeToTray = false;
+          parsed.minimizeToTray = false;
+          parsed.configVersion = 2;
+        }
+        return Object.assign({}, this.defaults, parsed);
       }
     } catch (err) {
       console.warn('[Teamux Store] Failed to load config, using defaults:', err.message);

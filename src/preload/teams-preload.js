@@ -4,6 +4,14 @@
 
 const { ipcRenderer } = require('electron');
 
+const isTopFrame = (() => {
+  try {
+    return window.top === window.self;
+  } catch (_) {
+    return false;
+  }
+})();
+
 // -------------------------------------------------------------
 // 1. Beauty Cam & Pro Studio Processing State
 // -------------------------------------------------------------
@@ -407,9 +415,9 @@ function applyTheme(themeKey) {
   }
 }
 
-// Early application at evaluation time
+// Early application at evaluation time (only top frame)
 try {
-  if (typeof document !== 'undefined') {
+  if (isTopFrame && typeof document !== 'undefined') {
     applyTheme(currentTheme);
   }
 } catch (_) {}
@@ -418,6 +426,7 @@ try {
 // 2. Stream Lifecycle Tracking & Instant Teardown
 // -------------------------------------------------------------
 const activeStreams = new Set();
+let currentCameraContext = null;
 
 function registerStream(stream) {
   if (!stream) return stream;
@@ -437,6 +446,10 @@ function registerStream(stream) {
 }
 
 function stopAllStreams() {
+  if (currentCameraContext) {
+    try { currentCameraContext.cleanup(); } catch (_) {}
+    currentCameraContext = null;
+  }
   activeStreams.forEach((stream) => {
     try {
       stream.getTracks().forEach((track) => {
@@ -462,6 +475,12 @@ if (origGetUserMedia) {
     if (!constraints || !constraints.video) {
       const stream = await origGetUserMedia.call(this || navigator.mediaDevices, constraints);
       return registerStream(stream);
+    }
+
+    // Clean up any existing active camera context to prevent duplicate/leaked render loops
+    if (currentCameraContext) {
+      try { currentCameraContext.cleanup(); } catch (_) {}
+      currentCameraContext = null;
     }
 
     // 1. Acquire real webcam from hardware
@@ -496,167 +515,214 @@ if (origGetUserMedia) {
     let vignetteW = 0;
     let vignetteH = 0;
 
-    // 4. Processing Render Loop (30 FPS)
-    const renderTimer = setInterval(() => {
-      // Resource Saver: Skip all rendering if video is not ready or user muted video
-      if (video.readyState < 2 || !rawVideoTrack.enabled || rawVideoTrack.readyState === 'ended') {
+    let isRunning = true;
+    let isFrameProcessing = false;
+    let frameHandle = null;
+
+    // Teardown helper for this camera stream
+    const cleanup = () => {
+      if (!isRunning) return;
+      isRunning = false;
+
+      if (frameHandle !== null) {
+        if (typeof video.cancelVideoFrameCallback === 'function') {
+          try { video.cancelVideoFrameCallback(frameHandle); } catch (_) {}
+        } else {
+          try { cancelAnimationFrame(frameHandle); } catch (_) {}
+        }
+        frameHandle = null;
+      }
+
+      rawStream.getTracks().forEach((t) => {
+        try { t.stop(); } catch (_) {}
+      });
+      video.srcObject = null;
+
+      if (currentCameraContext === cameraCtx) {
+        currentCameraContext = null;
+      }
+    };
+
+    const cameraCtx = { cleanup };
+    currentCameraContext = cameraCtx;
+
+    // 4. Processing Render Loop using requestVideoFrameCallback with backpressure
+    const processFrame = () => {
+      if (!isRunning) return;
+
+      // Schedule next tick synced to camera hardware frame presentation
+      if (typeof video.requestVideoFrameCallback === 'function') {
+        frameHandle = video.requestVideoFrameCallback(processFrame);
+      } else {
+        frameHandle = requestAnimationFrame(processFrame);
+      }
+
+      // Drop tick if previous frame is still rendering or if track is muted/stopped
+      if (isFrameProcessing || video.readyState < 2 || !rawVideoTrack.enabled || rawVideoTrack.readyState === 'ended') {
         return;
       }
 
-      if (canvas.width !== video.videoWidth && video.videoWidth > 0) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        cachedVignette = null; // Rebuild vignette on resize
-      }
-
-      const hasToneAdjustments = studioState.grayscaleEnabled ||
-                                 studioState.contrast !== 100 ||
-                                 studioState.saturation !== 100 ||
-                                 studioState.shadows !== 0 ||
-                                 studioState.ambience !== 0;
-
-      const isProcessingActive = (studioState.beautyEnabled ||
-                                  hasToneAdjustments ||
-                                  studioState.studioLightEnabled ||
-                                  studioState.vignetteEnabled) && !studioState.isComparing;
-
-      if (isProcessingActive) {
-        // --- REAL-TIME STUDIO & BEAUTY FILTER PIPELINE ---
-        // 1. Calculate combined filter parameters
-        let cVal = studioState.contrast; // 50 to 150
-        let sVal = studioState.saturation; // 0 to 200
-        let bVal = 100; // Base brightness
-
-        if (studioState.studioLightEnabled) {
-          bVal += 6;
-          cVal = Math.round(cVal * 1.03);
-          sVal = Math.round(sVal * 1.04);
+      isFrameProcessing = true;
+      try {
+        if (canvas.width !== video.videoWidth && video.videoWidth > 0) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          cachedVignette = null;
         }
 
-        // Shadow adjustment:
-        // Lifting shadows (+shadows) lifts darker tones by gently increasing base exposure
-        // and reducing harsh shadows, while -shadows deepens blacks.
-        if (studioState.shadows !== 0) {
-          bVal += Math.round(studioState.shadows * 0.30); // -15% to +15%
-          cVal = Math.round(cVal * (1 - studioState.shadows * 0.0018));
-        }
+        const hasToneAdjustments = studioState.grayscaleEnabled ||
+                                   studioState.contrast !== 100 ||
+                                   studioState.saturation !== 100 ||
+                                   studioState.shadows !== 0 ||
+                                   studioState.ambience !== 0;
 
-        // Ambience adjustment:
-        // Ambience adds balanced radiance and a hint of warm golden hour tone
-        if (studioState.ambience > 0) {
-          bVal += Math.round(studioState.ambience * 0.07);
-        }
+        const isProcessingActive = (studioState.beautyEnabled ||
+                                    hasToneAdjustments ||
+                                    studioState.studioLightEnabled ||
+                                    studioState.vignetteEnabled) && !studioState.isComparing;
 
-        const filterParts = [];
-        if (bVal !== 100) filterParts.push(`brightness(${bVal}%)`);
-        if (cVal !== 100) filterParts.push(`contrast(${cVal}%)`);
-        if (studioState.grayscaleEnabled) {
-          filterParts.push('grayscale(100%)');
-        } else {
-          if (sVal !== 100) filterParts.push(`saturate(${sVal}%)`);
+        if (isProcessingActive) {
+          let cVal = studioState.contrast;
+          let sVal = studioState.saturation;
+          let bVal = 100;
+
+          if (studioState.studioLightEnabled) {
+            bVal += 6;
+            cVal = Math.round(cVal * 1.03);
+            sVal = Math.round(sVal * 1.04);
+          }
+
+          if (studioState.shadows !== 0) {
+            bVal += Math.round(studioState.shadows * 0.30);
+            cVal = Math.round(cVal * (1 - studioState.shadows * 0.0018));
+          }
+
           if (studioState.ambience > 0) {
-            const sepiaPct = Math.round((studioState.ambience / 100) * 16);
-            if (sepiaPct > 0) filterParts.push(`sepia(${sepiaPct}%)`);
+            bVal += Math.round(studioState.ambience * 0.07);
           }
-        }
 
-        // Step A: Base Render with Tone & Color Filters
-        ctx.filter = filterParts.length > 0 ? filterParts.join(' ') : 'none';
-        ctx.globalAlpha = 1.0;
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const filterParts = [];
+          if (bVal !== 100) filterParts.push(`brightness(${bVal}%)`);
+          if (cVal !== 100) filterParts.push(`contrast(${cVal}%)`);
+          if (studioState.grayscaleEnabled) {
+            filterParts.push('grayscale(100%)');
+          } else {
+            if (sVal !== 100) filterParts.push(`saturate(${sVal}%)`);
+            if (studioState.ambience > 0) {
+              const sepiaPct = Math.round((studioState.ambience / 100) * 16);
+              if (sepiaPct > 0) filterParts.push(`sepia(${sepiaPct}%)`);
+            }
+          }
 
-        // Step B: Edge-Preserved Soft-Focus Skin Smoothing Overlay
-        if (studioState.beautyEnabled) {
-          const levelNorm = studioState.beautyLevel / 100;
-          const blurRadius = Math.max(2, Math.round(levelNorm * 7)); // 2px to 7px
-          const overlayAlpha = Math.min(0.55, 0.15 + (levelNorm * 0.38)); // 15% to 53% opacity
-
-          ctx.filter = `blur(${blurRadius}px)`;
-          ctx.globalAlpha = overlayAlpha;
+          // Step A: Base Render with Tone & Color Filters
+          ctx.filter = filterParts.length > 0 ? filterParts.join(' ') : 'none';
+          ctx.globalAlpha = 1.0;
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        }
 
-        // Step C: Ambient Lighting & Shadow Fill Light
-        if (studioState.shadows > 10 && !studioState.grayscaleEnabled) {
-          ctx.filter = 'none';
-          ctx.globalCompositeOperation = 'screen';
-          ctx.fillStyle = `rgba(180, 195, 215, ${(studioState.shadows / 100) * 0.14})`;
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.globalCompositeOperation = 'source-over';
-        }
+          // Step B: Edge-Preserved Soft-Focus Skin Smoothing Overlay
+          if (studioState.beautyEnabled) {
+            const levelNorm = studioState.beautyLevel / 100;
+            const blurRadius = Math.max(2, Math.round(levelNorm * 6));
+            const overlayAlpha = Math.min(0.50, 0.15 + (levelNorm * 0.35));
 
-        // Step D: Warm Ambient Light Glow (Ambience > 20)
-        if (studioState.ambience > 20 && !studioState.grayscaleEnabled) {
-          ctx.filter = 'none';
-          ctx.globalCompositeOperation = 'soft-light';
-          const ambAlpha = (studioState.ambience / 100) * 0.22;
-          ctx.fillStyle = `rgba(255, 232, 204, ${ambAlpha})`;
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.globalCompositeOperation = 'source-over';
-        }
-
-        // Step E: Portrait Focus / Backdrop Vignette (Cached gradient)
-        if (studioState.vignetteEnabled) {
-          ctx.filter = 'none';
-          ctx.globalCompositeOperation = 'source-over';
-          if (!cachedVignette || vignetteW !== canvas.width || vignetteH !== canvas.height) {
-            vignetteW = canvas.width;
-            vignetteH = canvas.height;
-            cachedVignette = ctx.createRadialGradient(
-              vignetteW / 2, vignetteH / 2, Math.min(vignetteW, vignetteH) * 0.35,
-              vignetteW / 2, vignetteH / 2, Math.max(vignetteW, vignetteH) * 0.75
-            );
-            cachedVignette.addColorStop(0, 'rgba(0,0,0,0)');
-            cachedVignette.addColorStop(1, 'rgba(0,0,0,0.50)');
+            ctx.filter = `blur(${blurRadius}px)`;
+            ctx.globalAlpha = overlayAlpha;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           }
-          ctx.fillStyle = cachedVignette;
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          // Step C: Ambient Lighting & Shadow Fill Light
+          if (studioState.shadows > 10 && !studioState.grayscaleEnabled) {
+            ctx.filter = 'none';
+            ctx.globalCompositeOperation = 'screen';
+            ctx.fillStyle = `rgba(180, 195, 215, ${(studioState.shadows / 100) * 0.14})`;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.globalCompositeOperation = 'source-over';
+          }
+
+          // Step D: Warm Ambient Light Glow
+          if (studioState.ambience > 20 && !studioState.grayscaleEnabled) {
+            ctx.filter = 'none';
+            ctx.globalCompositeOperation = 'soft-light';
+            const ambAlpha = (studioState.ambience / 100) * 0.22;
+            ctx.fillStyle = `rgba(255, 232, 204, ${ambAlpha})`;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.globalCompositeOperation = 'source-over';
+          }
+
+          // Step E: Portrait Focus / Backdrop Vignette
+          if (studioState.vignetteEnabled) {
+            ctx.filter = 'none';
+            ctx.globalCompositeOperation = 'source-over';
+            if (!cachedVignette || vignetteW !== canvas.width || vignetteH !== canvas.height) {
+              vignetteW = canvas.width;
+              vignetteH = canvas.height;
+              cachedVignette = ctx.createRadialGradient(
+                vignetteW / 2, vignetteH / 2, Math.min(vignetteW, vignetteH) * 0.35,
+                vignetteW / 2, vignetteH / 2, Math.max(vignetteW, vignetteH) * 0.75
+              );
+              cachedVignette.addColorStop(0, 'rgba(0,0,0,0)');
+              cachedVignette.addColorStop(1, 'rgba(0,0,0,0.50)');
+            }
+            ctx.fillStyle = cachedVignette;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+          }
+
+          // Reset canvas context
+          ctx.filter = 'none';
+          ctx.globalAlpha = 1.0;
+          ctx.globalCompositeOperation = 'source-over';
+        } else {
+          // --- RAW CAMERA PASSTHROUGH (Or "Hold to Compare" mode) ---
+          ctx.filter = 'none';
+          ctx.globalAlpha = 1.0;
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+          if (studioState.isComparing) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+            ctx.beginPath();
+            if (typeof ctx.roundRect === 'function') {
+              ctx.roundRect(16, 16, 170, 36, 8);
+            } else {
+              ctx.rect(16, 16, 170, 36);
+            }
+            ctx.fill();
+
+            ctx.font = 'bold 14px sans-serif';
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillText('👁️ RAW ORIGINAL', 32, 40);
+          }
         }
-
-        // Reset canvas context
-        ctx.filter = 'none';
-        ctx.globalAlpha = 1.0;
-        ctx.globalCompositeOperation = 'source-over';
-      } else {
-        // --- RAW CAMERA PASSTHROUGH (Or "Hold to Compare" mode) ---
-        ctx.filter = 'none';
-        ctx.globalAlpha = 1.0;
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        // If user is actively holding "Compare", display temporary A/B label badge
-        if (studioState.isComparing) {
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
-          ctx.beginPath();
-          ctx.roundRect(16, 16, 170, 36, 8);
-          ctx.fill();
-
-          ctx.font = 'bold 14px sans-serif';
-          ctx.fillStyle = '#38bdf8';
-          ctx.fillText('👁️ RAW ORIGINAL', 32, 40);
-        }
+      } catch (drawErr) {
+        // Safe fallback: never crash or hang the pipeline
+        try {
+          ctx.filter = 'none';
+          ctx.globalAlpha = 1.0;
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        } catch (_) {}
+      } finally {
+        isFrameProcessing = false;
       }
-    }, 1000 / 30);
+    };
+
+    // Start hardware-synced render loop
+    if (typeof video.requestVideoFrameCallback === 'function') {
+      frameHandle = video.requestVideoFrameCallback(processFrame);
+    } else {
+      frameHandle = requestAnimationFrame(processFrame);
+    }
 
     // 5. Capture processed stream
     const virtualStream = canvas.captureStream(30);
     const virtualVideoTrack = virtualStream.getVideoTracks()[0];
 
-    // Clean up when virtual track is terminated
-    const stopAllWebcam = () => {
-      clearInterval(renderTimer);
-      rawStream.getTracks().forEach((t) => {
-        try { t.stop(); } catch (_) {}
-      });
-      video.srcObject = null;
-    };
-
     const origTrackStop = virtualVideoTrack.stop.bind(virtualVideoTrack);
     virtualVideoTrack.stop = () => {
-      stopAllWebcam();
+      cleanup();
       origTrackStop();
     };
-    virtualVideoTrack.addEventListener('ended', stopAllWebcam);
+    virtualVideoTrack.addEventListener('ended', cleanup);
 
     // Combine virtual video with real audio tracks
     const combinedTracks = [virtualVideoTrack, ...rawStream.getAudioTracks()];
@@ -1494,6 +1560,10 @@ function injectStudioUI() {
 }
 
 function showStudioWidget() {
+  if (!isTopFrame) {
+    try { window.top.postMessage({ type: 'teamux-show-studio' }, '*'); } catch (_) {}
+    return;
+  }
   const widget = document.getElementById('teamux-studio-widget');
   const card = document.getElementById('teamux-studio-card');
   const pill = document.getElementById('teamux-studio-pill');
@@ -1507,6 +1577,7 @@ function showStudioWidget() {
 }
 
 function updateActiveCallBanner() {
+  if (!isTopFrame) return;
   const banner = document.getElementById('teamux-call-banner');
   if (!banner) return;
 
@@ -1515,9 +1586,18 @@ function updateActiveCallBanner() {
 }
 
 // -------------------------------------------------------------
-// 5. DOM Initialization & Notification Badges
+// 5. DOM Initialization & Notification Badges (Top Frame Only)
 // -------------------------------------------------------------
 window.addEventListener('DOMContentLoaded', () => {
+  if (!isTopFrame) return;
+
+  // Listen for studio requests from calling frames
+  window.addEventListener('message', (ev) => {
+    if (ev.data && ev.data.type === 'teamux-show-studio') {
+      showStudioWidget();
+    }
+  });
+
   // Hide annoying Teams download banners
   const style = document.createElement('style');
   style.id = 'teamux-custom-styles';
@@ -1545,7 +1625,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!document.getElementById('teamux-theme-styles') && currentTheme !== 'default') {
       applyTheme(currentTheme);
     }
-  }, 1500);
+  }, 4000);
 
   // Monitor document.title to detect unread badges (e.g., "(3) Microsoft Teams")
   const titleElement = document.querySelector('title');
@@ -1558,7 +1638,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   setInterval(() => {
     checkTitleForBadges(document.title);
-  }, 3000);
+  }, 5000);
 
   // Immediately stop V4L2 webcam and PipeWire screenshare when user clicks "Leave" / "Hang up"
   document.addEventListener('click', (e) => {
@@ -1581,7 +1661,7 @@ window.addEventListener('beforeunload', stopAllStreams);
 
 let lastCount = 0;
 function checkTitleForBadges(title) {
-  if (!title) return;
+  if (!isTopFrame || !title) return;
   const match = title.match(/\((\d+)\)/);
   const count = match ? parseInt(match[1], 10) : 0;
   if (count !== lastCount) {
