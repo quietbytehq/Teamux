@@ -5,6 +5,8 @@ const closeToTray = document.getElementById('closeToTray');
 const minimizeToTray = document.getElementById('minimizeToTray');
 const startMinimized = document.getElementById('startMinimized');
 const enableUnreadBadges = document.getElementById('enableUnreadBadges');
+const adaptiveNetworkGuardian = document.getElementById('adaptiveNetworkGuardian');
+const bandwidthMode = document.getElementById('bandwidthMode');
 const hardwareAcceleration = document.getElementById('hardwareAcceleration');
 const forceWayland = document.getElementById('forceWayland');
 
@@ -22,6 +24,8 @@ async function loadCurrentSettings() {
   minimizeToTray.checked = !!config.minimizeToTray;
   startMinimized.checked = !!config.startMinimized;
   enableUnreadBadges.checked = !!config.enableUnreadBadges;
+  adaptiveNetworkGuardian.checked = config.adaptiveNetworkGuardian !== false;
+  bandwidthMode.value = config.bandwidthMode || 'auto';
   hardwareAcceleration.checked = !!config.hardwareAcceleration;
   forceWayland.checked = !!config.forceWayland;
 }
@@ -35,6 +39,8 @@ btnSave.addEventListener('click', async () => {
     minimizeToTray: minimizeToTray.checked,
     startMinimized: startMinimized.checked,
     enableUnreadBadges: enableUnreadBadges.checked,
+    adaptiveNetworkGuardian: adaptiveNetworkGuardian.checked,
+    bandwidthMode: bandwidthMode.value,
     hardwareAcceleration: hardwareAcceleration.checked,
     forceWayland: forceWayland.checked
   };

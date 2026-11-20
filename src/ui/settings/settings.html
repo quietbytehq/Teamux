@@ -57,7 +57,28 @@
       </section>
 
       <section class="section">
-        <h3>Linux Hardware & Display</h3>
+        <h3>Network & Bandwidth Guardian</h3>
+        <div class="checkbox-group">
+          <label>
+            <input type="checkbox" id="adaptiveNetworkGuardian">
+            <span>Adaptive Network Guardian (Auto-Throttle video when connection slows)</span>
+          </label>
+          <span class="field-hint">Automatically steps down video quality or pauses video to protect voice audio when ping or packet loss spikes in branch offices.</span>
+        </div>
+        <div class="form-group" style="margin-top: 10px;">
+          <label for="bandwidthMode">Default Video Bandwidth Mode:</label>
+          <select id="bandwidthMode" class="input">
+            <option value="auto">Auto Adaptive (720p ➔ 480p ➔ 360p ➔ Audio-First)</option>
+            <option value="720p">High Quality (720p @ 30 FPS / ~2.0 Mbps)</option>
+            <option value="480p">Balanced Office (480p @ 20 FPS / ~500 kbps - 75% savings)</option>
+            <option value="360p">Eco Bandwidth Saver (360p @ 15 FPS / ~250 kbps - 88% savings)</option>
+            <option value="audio-only">Audio-Only Priority (Camera off to save 100% video bandwidth)</option>
+          </select>
+        </div>
+      </section>
+
+      <section class="section">
+        <h3>Hardware & Display</h3>
         <div class="checkbox-group">
           <label>
             <input type="checkbox" id="hardwareAcceleration">

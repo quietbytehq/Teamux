@@ -1,6 +1,5 @@
 appId: uk.quietbytehq.teamux
 productName: Teamux
-artifactName: "${name}-v${version}-linux-${arch}.${ext}"
 
 directories:
   output: dist
@@ -14,17 +13,12 @@ files:
   - "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}"
 
 linux:
+  artifactName: "${name}-v${version}-linux-${arch}.${ext}"
   target:
     - target: AppImage
       arch:
         - x64
     - target: deb
-      arch:
-        - x64
-    - target: rpm
-      arch:
-        - x64
-    - target: pacman
       arch:
         - x64
     - target: tar.gz
@@ -35,11 +29,25 @@ linux:
   category: Network
   icon: assets/icons
   executableName: teamux
-  synopsis: Unofficial Microsoft Teams desktop client for Linux with native Wayland, PipeWire screen sharing, and camera support.
+  synopsis: Microsoft Teams desktop client with Adaptive Network Guardian, Studio Camera, and low-bandwidth optimization.
   description: |
-    Teamux is an open-source unofficial Microsoft Teams desktop client tailored specifically for Linux.
-    It solves screen sharing and camera permissions across Wayland and X11 via PipeWire and
-    xdg-desktop-portal, featuring system tray integration, unread badge alerts, and multi-distro packages.
+    Teamux is an enhanced Microsoft Teams desktop client for Linux and Windows.
+    Features include the Adaptive Network Guardian for low-bandwidth branch offices,
+    in-meeting Studio Beauty Cam, themes engine, and native Wayland/PipeWire/Windows support.
+
+win:
+  artifactName: "${name}-v${version}-windows-${arch}.${ext}"
+  target:
+    - target: portable
+      arch:
+        - x64
+    - target: zip
+      arch:
+        - x64
+  icon: assets/icon.ico
+
+portable:
+  artifactName: "${name}-v${version}-windows-portable-${arch}.${ext}"
 
 deb:
   packageCategory: net
@@ -48,19 +56,6 @@ deb:
     - xdg-utils
     - libnotify4
     - libsecret-1-0
-
-rpm:
-  category: Applications/Internet
-  depends:
-    - xdg-utils
-    - libnotify
-    - libsecret
-
-pacman:
-  depends:
-    - xdg-utils
-    - libnotify
-    - libsecret
 
 appImage:
   category: Network

@@ -12,7 +12,7 @@ function createTray(mainWindow, openSettings, bringAllToFront) {
   const iconPath = path.join(assetsDir, 'tray-idle.png');
 
   tray = new Tray(iconPath);
-  tray.setToolTip('Teamux - Microsoft Teams for Linux');
+  tray.setToolTip('Teamux - Microsoft Teams');
 
   updateContextMenu(mainWindow, openSettings, bringAllToFront);
 
@@ -102,7 +102,7 @@ function setTrayUnreadCount(count, mainWindow, openSettings, bringAllToFront) {
 
   const tip = count > 0 
     ? `Teamux - ${count} unread notification${count > 1 ? 's' : ''}`
-    : 'Teamux - Microsoft Teams for Linux';
+    : 'Teamux - Microsoft Teams';
   tray.setToolTip(tip);
 
   updateContextMenu(mainWindow, openSettings, bringAllToFront);

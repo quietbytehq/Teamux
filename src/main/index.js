@@ -107,7 +107,7 @@ async function createMainWindow() {
   const isMaximized = store.get('isMaximized', false);
   const startMinimized = store.get('startMinimized', false);
 
-  const iconPath = path.join(__dirname, '../../assets/icon.png');
+  const iconPath = path.join(__dirname, '../../assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
 
   mainWindow = new BrowserWindow({
     title: 'Teamux - Microsoft Teams',

@@ -464,6 +464,227 @@ function stopAllStreams() {
 }
 
 // -------------------------------------------------------------
+// 2b. Adaptive Network Guardian (WebRTC Telemetry & Auto-Throttle)
+// -------------------------------------------------------------
+const QUALITY_PROFILES = {
+  '720p': {
+    id: '720p',
+    name: 'Full HD (Normal)',
+    width: 1280,
+    height: 720,
+    fps: 30,
+    maxBitrate: 2000000,
+    badge: '720p',
+    icon: '🚀'
+  },
+  '480p': {
+    id: '480p',
+    name: 'Balanced Office',
+    width: 854,
+    height: 480,
+    fps: 20,
+    maxBitrate: 500000,
+    badge: '480p',
+    icon: '⚖️'
+  },
+  '360p': {
+    id: '360p',
+    name: 'Eco Saver',
+    width: 640,
+    height: 360,
+    fps: 15,
+    maxBitrate: 250000,
+    badge: '360p',
+    icon: '📉'
+  },
+  'audio-only': {
+    id: 'audio-only',
+    name: 'Audio-First Priority',
+    width: 480,
+    height: 270,
+    fps: 1,
+    maxBitrate: 30000,
+    badge: 'Voice Only',
+    icon: '🔴'
+  }
+};
+
+const networkState = {
+  guardianEnabled: localStorage.getItem('teamux_guardian_enabled') !== 'false', // default true
+  bandwidthMode: localStorage.getItem('teamux_bandwidth_mode') || 'auto', // 'auto', '720p', '480p', '360p', 'audio-only'
+  currentTier: '720p',
+  currentRtt: 0,
+  currentLoss: 0,
+  currentBitrate: 0,
+  audioFirstEngaged: false,
+  networkQuality: 'good', // 'good', 'moderate', 'poor', 'critical'
+  activePeerConnections: new Set(),
+  activeSenders: new Set()
+};
+
+function saveNetworkSettings() {
+  localStorage.setItem('teamux_guardian_enabled', networkState.guardianEnabled ? 'true' : 'false');
+  localStorage.setItem('teamux_bandwidth_mode', networkState.bandwidthMode);
+}
+
+// Hook RTCPeerConnection to track active WebRTC call sessions and apply bitrate caps
+const OrigRTCPeerConnection = typeof RTCPeerConnection !== 'undefined' ? RTCPeerConnection : null;
+if (OrigRTCPeerConnection) {
+  window.RTCPeerConnection = function(...args) {
+    const pc = new OrigRTCPeerConnection(...args);
+    networkState.activePeerConnections.add(pc);
+
+    pc.addEventListener('connectionstatechange', () => {
+      if (pc.connectionState === 'closed' || pc.connectionState === 'failed') {
+        networkState.activePeerConnections.delete(pc);
+      }
+    });
+
+    const origAddTrack = pc.addTrack.bind(pc);
+    pc.addTrack = function(track, ...streams) {
+      const sender = origAddTrack(track, ...streams);
+      if (track && track.kind === 'video') {
+        networkState.activeSenders.add(sender);
+        applyBitrateToSender(sender, networkState.currentTier);
+      }
+      return sender;
+    };
+
+    return pc;
+  };
+  window.RTCPeerConnection.prototype = OrigRTCPeerConnection.prototype;
+}
+
+async function applyBitrateToSender(sender, tierKey) {
+  if (!sender || typeof sender.getParameters !== 'function') return;
+  const profile = QUALITY_PROFILES[tierKey] || QUALITY_PROFILES['720p'];
+  try {
+    const params = sender.getParameters();
+    if (!params.encodings || params.encodings.length === 0) {
+      params.encodings = [{}];
+    }
+    params.encodings.forEach((enc) => {
+      enc.maxBitrate = profile.maxBitrate;
+    });
+    await sender.setParameters(params);
+  } catch (_) {}
+}
+
+function updateAllSendersBitrate(tierKey) {
+  networkState.activeSenders.forEach((sender) => {
+    applyBitrateToSender(sender, tierKey);
+  });
+}
+
+let consecutiveGoodTelemetry = 0;
+
+function evaluateAndApplyAdaptiveNetwork(rtt, lossPct, bwe) {
+  if (networkState.bandwidthMode !== 'auto') {
+    applyQualityTier(networkState.bandwidthMode);
+    return;
+  }
+  if (!networkState.guardianEnabled) {
+    applyQualityTier('720p');
+    return;
+  }
+
+  // 1. Critical congestion: Ping > 500ms or loss > 15% or BWE < 180 kbps
+  if (rtt > 500 || lossPct > 15 || (bwe > 0 && bwe < 180000)) {
+    consecutiveGoodTelemetry = 0;
+    networkState.networkQuality = 'critical';
+    applyQualityTier('audio-only');
+    return;
+  }
+
+  // 2. Heavy congestion: Ping 260-500ms or loss 6-15% or BWE < 420 kbps
+  if (rtt > 260 || lossPct > 6 || (bwe > 0 && bwe < 420000)) {
+    consecutiveGoodTelemetry = 0;
+    networkState.networkQuality = 'poor';
+    applyQualityTier('360p');
+    return;
+  }
+
+  // 3. Moderate congestion: Ping 130-260ms or loss 2-6%
+  if (rtt > 130 || lossPct > 2 || (bwe > 0 && bwe < 800000)) {
+    consecutiveGoodTelemetry = 0;
+    networkState.networkQuality = 'moderate';
+    applyQualityTier('480p');
+    return;
+  }
+
+  // 4. Good network
+  consecutiveGoodTelemetry++;
+  networkState.networkQuality = 'good';
+  // Hysteresis: require 3 consecutive good samples (7.5s) to step back up to 720p
+  if (consecutiveGoodTelemetry >= 3) {
+    applyQualityTier('720p');
+  }
+}
+
+function applyQualityTier(tierKey) {
+  if (!QUALITY_PROFILES[tierKey]) tierKey = '720p';
+  const tierChanged = networkState.currentTier !== tierKey;
+  networkState.currentTier = tierKey;
+  networkState.audioFirstEngaged = (tierKey === 'audio-only');
+
+  if (tierChanged) {
+    updateAllSendersBitrate(tierKey);
+    updateStudioPillNetworkBadge();
+    updateActiveCallBanner();
+    updateNetworkDashboardUI();
+  }
+}
+
+// Telemetry Poller: Evaluates WebRTC metrics every 2.5 seconds
+setInterval(async () => {
+  if (networkState.activePeerConnections.size === 0) {
+    if (typeof navigator !== 'undefined' && navigator.connection && navigator.connection.rtt) {
+      networkState.currentRtt = navigator.connection.rtt;
+    }
+    updateNetworkDashboardUI();
+    return;
+  }
+
+  let maxRtt = 0;
+  let maxLoss = 0;
+  let estimatedBps = 0;
+
+  for (const pc of networkState.activePeerConnections) {
+    try {
+      if (pc.connectionState === 'closed') {
+        networkState.activePeerConnections.delete(pc);
+        continue;
+      }
+      const stats = await pc.getStats();
+      stats.forEach((report) => {
+        if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+          if (typeof report.currentRoundTripTime === 'number') {
+            const rttMs = Math.round(report.currentRoundTripTime * 1000);
+            if (rttMs > maxRtt) maxRtt = rttMs;
+          }
+          if (typeof report.availableOutgoingBitrate === 'number') {
+            estimatedBps = report.availableOutgoingBitrate;
+          }
+        }
+        if (report.type === 'remote-inbound-rtp' && report.kind === 'video') {
+          if (typeof report.fractionLost === 'number') {
+            const lossPct = Math.round(report.fractionLost * 100);
+            if (lossPct > maxLoss) maxLoss = lossPct;
+          }
+        }
+      });
+    } catch (_) {}
+  }
+
+  networkState.currentRtt = maxRtt;
+  networkState.currentLoss = maxLoss;
+  networkState.currentBitrate = estimatedBps;
+
+  evaluateAndApplyAdaptiveNetwork(maxRtt, maxLoss, estimatedBps);
+  updateNetworkDashboardUI();
+}, 2500);
+
+// -------------------------------------------------------------
 // 3. Virtual Camera Hook (getUserMedia Interceptor)
 // -------------------------------------------------------------
 const MediaDevicesProto = typeof MediaDevices !== 'undefined' ? MediaDevices.prototype : null;
@@ -518,6 +739,7 @@ if (origGetUserMedia) {
     let isRunning = true;
     let isFrameProcessing = false;
     let frameHandle = null;
+    let lastRenderTime = 0;
 
     // Teardown helper for this camera stream
     const cleanup = () => {
@@ -546,7 +768,7 @@ if (origGetUserMedia) {
     const cameraCtx = { cleanup };
     currentCameraContext = cameraCtx;
 
-    // 4. Processing Render Loop using requestVideoFrameCallback with backpressure
+    // 4. Processing Render Loop using requestVideoFrameCallback with backpressure & adaptive quality
     const processFrame = () => {
       if (!isRunning) return;
 
@@ -557,16 +779,49 @@ if (origGetUserMedia) {
         frameHandle = requestAnimationFrame(processFrame);
       }
 
+      // Check adaptive framerate throttle
+      const profile = QUALITY_PROFILES[networkState.currentTier] || QUALITY_PROFILES['720p'];
+      const now = performance.now();
+      const minInterval = 1000 / (profile.fps || 30);
+      if (now - lastRenderTime < minInterval - 3) {
+        return;
+      }
+
       // Drop tick if previous frame is still rendering or if track is muted/stopped
       if (isFrameProcessing || video.readyState < 2 || !rawVideoTrack.enabled || rawVideoTrack.readyState === 'ended') {
         return;
       }
 
       isFrameProcessing = true;
+      lastRenderTime = now;
       try {
-        if (canvas.width !== video.videoWidth && video.videoWidth > 0) {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
+        if (networkState.currentTier === 'audio-only') {
+          // Audio-First Mode: Video stream is paused with clean informative slate to preserve 100% bandwidth for audio
+          ctx.filter = 'none';
+          ctx.globalAlpha = 1.0;
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.fillStyle = '#0f172a';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          ctx.fillStyle = '#ef4444';
+          ctx.font = 'bold 20px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('🔴 Audio-First Mode Active', canvas.width / 2, canvas.height / 2 - 20);
+
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = '13px sans-serif';
+          ctx.fillText('Video upload paused to protect voice audio quality.', canvas.width / 2, canvas.height / 2 + 14);
+          ctx.fillText('Resuming automatically when network clears.', canvas.width / 2, canvas.height / 2 + 34);
+          return;
+        }
+
+        const targetW = Math.min(profile.width, video.videoWidth || 1280);
+        const targetH = Math.min(profile.height, video.videoHeight || 720);
+
+        if (canvas.width !== targetW || canvas.height !== targetH) {
+          canvas.width = targetW;
+          canvas.height = targetH;
           cachedVignette = null;
         }
 
@@ -1097,6 +1352,90 @@ function injectStudioUI() {
       background: #1e293b;
       border-color: #4ade80;
     }
+    /* Network Tab Styles */
+    .teamux-select {
+      width: 100%;
+      background: #24242a;
+      border: 1px solid #3f3f46;
+      color: #f4f4f5;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      outline: none;
+      cursor: pointer;
+    }
+    .teamux-select:focus {
+      border-color: #818cf8;
+    }
+    .teamux-select option {
+      background: #18181b;
+      color: #f4f4f5;
+    }
+    .teamux-network-dashboard {
+      background: rgba(24, 24, 27, 0.75);
+      border: 1px solid rgba(63, 63, 70, 0.5);
+      border-radius: 8px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .teamux-net-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .teamux-net-stat {
+      background: rgba(39, 39, 42, 0.6);
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(63, 63, 70, 0.35);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .teamux-net-label {
+      font-size: 10px;
+      color: #a1a1aa;
+    }
+    .teamux-net-val {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f4f4f5;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .teamux-status-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 10px;
+      color: white;
+    }
+    .teamux-status-good { background: #16a34a; }
+    .teamux-status-moderate { background: #d97706; }
+    .teamux-status-poor { background: #ea580c; }
+    .teamux-status-critical { background: #dc2626; }
+    .teamux-pill-net-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.15);
+      color: #e0e7ff;
+      margin-left: 4px;
+    }
+    @keyframes teamuxPulseRed {
+      0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+      70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+    @keyframes teamuxPulseAmber {
+      0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.5); }
+      70% { box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+    }
   `;
   document.head.appendChild(style);
 
@@ -1198,9 +1537,15 @@ function injectStudioUI() {
   tabThemes.type = 'button';
   tabThemes.textContent = '🎭 Themes';
 
+  const tabNetwork = document.createElement('button');
+  tabNetwork.className = `teamux-studio-tab ${studioState.activeTab === 'network' ? 'active' : ''}`;
+  tabNetwork.type = 'button';
+  tabNetwork.textContent = '🌐 Network';
+
   tabsBar.appendChild(tabRetouch);
   tabsBar.appendChild(tabTone);
   tabsBar.appendChild(tabThemes);
+  tabsBar.appendChild(tabNetwork);
   card.appendChild(tabsBar);
 
   // Body
@@ -1355,6 +1700,136 @@ function injectStudioUI() {
   paneThemes.appendChild(themeList);
   body.appendChild(paneThemes);
 
+  // --- TAB PANE 4: NETWORK & BANDWIDTH GUARDIAN ---
+  const paneNetwork = document.createElement('div');
+  paneNetwork.className = `teamux-tab-pane ${studioState.activeTab === 'network' ? '' : 'hidden'}`;
+
+  // 1. Guardian Toggle Row
+  paneNetwork.appendChild(createToggleRow('Adaptive Guardian', 'teamux-toggle-guardian', networkState.guardianEnabled));
+
+  // 2. Bandwidth Profile Selector
+  const modeGroup = document.createElement('div');
+  modeGroup.className = 'teamux-range-group';
+
+  const modeLabel = document.createElement('div');
+  modeLabel.className = 'teamux-range-label';
+  const modeTitle = document.createElement('span');
+  modeTitle.textContent = 'Bandwidth Profile';
+  modeLabel.appendChild(modeTitle);
+
+  const modeSelect = document.createElement('select');
+  modeSelect.id = 'teamux-select-bandwidth';
+  modeSelect.className = 'teamux-select';
+
+  const bandwidthOptions = [
+    { value: 'auto', label: 'Auto (Dynamic Guardian)' },
+    { value: '720p', label: '720p Full HD (~2.0 Mbps)' },
+    { value: '480p', label: '480p Balanced (~500 kbps)' },
+    { value: '360p', label: '360p Eco Saver (~250 kbps)' },
+    { value: 'audio-only', label: 'Audio-First Priority (~30 kbps)' }
+  ];
+
+  bandwidthOptions.forEach(opt => {
+    const el = document.createElement('option');
+    el.value = opt.value;
+    el.textContent = opt.label;
+    if (networkState.bandwidthMode === opt.value) {
+      el.selected = true;
+    }
+    modeSelect.appendChild(el);
+  });
+
+  modeGroup.appendChild(modeLabel);
+  modeGroup.appendChild(modeSelect);
+  paneNetwork.appendChild(modeGroup);
+
+  // 3. Live Telemetry Dashboard Card
+  const dashboard = document.createElement('div');
+  dashboard.className = 'teamux-network-dashboard';
+
+  const dashTitle = document.createElement('div');
+  dashTitle.style.cssText = 'font-size:11px; font-weight:600; color:#cbd5e1; display:flex; justify-content:space-between; align-items:center;';
+  const dashTitleSpan = document.createElement('span');
+  dashTitleSpan.textContent = 'Live WebRTC Telemetry';
+  const dashStatusBadge = document.createElement('span');
+  dashStatusBadge.id = 'teamux-net-badge-status';
+  dashStatusBadge.className = 'teamux-status-badge teamux-status-good';
+  dashStatusBadge.textContent = 'Optimal';
+  dashTitle.appendChild(dashTitleSpan);
+  dashTitle.appendChild(dashStatusBadge);
+
+  const grid = document.createElement('div');
+  grid.className = 'teamux-net-grid';
+
+  // Stat 1: RTT / Ping
+  const statRtt = document.createElement('div');
+  statRtt.className = 'teamux-net-stat';
+  const labelRtt = document.createElement('div');
+  labelRtt.className = 'teamux-net-label';
+  labelRtt.textContent = 'Latency (RTT)';
+  const valRtt = document.createElement('div');
+  valRtt.id = 'teamux-net-rtt';
+  valRtt.className = 'teamux-net-val';
+  valRtt.textContent = `${networkState.currentRtt || 0} ms`;
+  statRtt.appendChild(labelRtt);
+  statRtt.appendChild(valRtt);
+
+  // Stat 2: Packet Loss
+  const statLoss = document.createElement('div');
+  statLoss.className = 'teamux-net-stat';
+  const labelLoss = document.createElement('div');
+  labelLoss.className = 'teamux-net-label';
+  labelLoss.textContent = 'Packet Loss';
+  const valLoss = document.createElement('div');
+  valLoss.id = 'teamux-net-loss';
+  valLoss.className = 'teamux-net-val';
+  valLoss.textContent = `${networkState.currentLoss || 0}%`;
+  statLoss.appendChild(labelLoss);
+  statLoss.appendChild(valLoss);
+
+  // Stat 3: Est. Bitrate
+  const statBwe = document.createElement('div');
+  statBwe.className = 'teamux-net-stat';
+  const labelBwe = document.createElement('div');
+  labelBwe.className = 'teamux-net-label';
+  labelBwe.textContent = 'Est. Bandwidth';
+  const valBwe = document.createElement('div');
+  valBwe.id = 'teamux-net-bwe';
+  valBwe.className = 'teamux-net-val';
+  valBwe.textContent = networkState.currentBitrate > 0 ? `${Math.round(networkState.currentBitrate / 1000)} kbps` : '--';
+  statBwe.appendChild(labelBwe);
+  statBwe.appendChild(valBwe);
+
+  // Stat 4: Active Resolution / FPS
+  const statTier = document.createElement('div');
+  statTier.className = 'teamux-net-stat';
+  const labelTier = document.createElement('div');
+  labelTier.className = 'teamux-net-label';
+  labelTier.textContent = 'Active Video Stream';
+  const valTier = document.createElement('div');
+  valTier.id = 'teamux-net-tier';
+  valTier.className = 'teamux-net-val';
+  valTier.textContent = QUALITY_PROFILES[networkState.currentTier]?.badge || '720p';
+  statTier.appendChild(labelTier);
+  statTier.appendChild(valTier);
+
+  grid.appendChild(statRtt);
+  grid.appendChild(statLoss);
+  grid.appendChild(statBwe);
+  grid.appendChild(statTier);
+
+  dashboard.appendChild(dashTitle);
+  dashboard.appendChild(grid);
+  paneNetwork.appendChild(dashboard);
+
+  // 4. Net Hint Box
+  const netHint = document.createElement('div');
+  netHint.className = 'teamux-hint-box';
+  netHint.textContent = '🛡️ When branch network is constrained, video throttles automatically to guarantee 100% voice clarity.';
+  paneNetwork.appendChild(netHint);
+
+  body.appendChild(paneNetwork);
+
   // Common: Compare Button (always at the bottom of retouch/tone tabs)
   const btnCompare = document.createElement('button');
   btnCompare.id = 'teamux-btn-compare';
@@ -1362,7 +1837,7 @@ function injectStudioUI() {
   btnCompare.type = 'button';
   btnCompare.title = 'Hold down to temporarily see your raw camera';
   btnCompare.textContent = '👁️ Hold to Compare';
-  btnCompare.style.display = studioState.activeTab === 'themes' ? 'none' : 'flex';
+  btnCompare.style.display = (studioState.activeTab === 'themes' || studioState.activeTab === 'network') ? 'none' : 'flex';
   body.appendChild(btnCompare);
 
   card.appendChild(body);
@@ -1377,8 +1852,13 @@ function injectStudioUI() {
   pillIcon.textContent = '✨';
   const pillText = document.createElement('span');
   pillText.textContent = 'Studio';
+  const pillNetBadge = document.createElement('span');
+  pillNetBadge.id = 'teamux-pill-net-badge';
+  pillNetBadge.className = 'teamux-pill-net-badge';
+  pillNetBadge.textContent = QUALITY_PROFILES[networkState.currentTier]?.badge || '720p';
   pill.appendChild(pillIcon);
   pill.appendChild(pillText);
+  pill.appendChild(pillNetBadge);
   container.appendChild(pill);
 
   document.body.appendChild(container);
@@ -1387,6 +1867,7 @@ function injectStudioUI() {
   const callBanner = document.createElement('div');
   callBanner.id = 'teamux-call-banner';
   const callText = document.createElement('span');
+  callText.id = 'teamux-call-banner-text';
   callText.textContent = '🟢 Active Call in Progress';
   const callBtn = document.createElement('span');
   callBtn.textContent = 'RETURN TO MEETING';
@@ -1410,9 +1891,11 @@ function injectStudioUI() {
     tabRetouch.classList.add('active');
     tabTone.classList.remove('active');
     tabThemes.classList.remove('active');
+    tabNetwork.classList.remove('active');
     paneRetouch.classList.remove('hidden');
     paneTone.classList.add('hidden');
     paneThemes.classList.add('hidden');
+    paneNetwork.classList.add('hidden');
     btnCompare.style.display = 'flex';
     studioState.activeTab = 'retouch';
     saveStudioSettings();
@@ -1422,9 +1905,11 @@ function injectStudioUI() {
     tabTone.classList.add('active');
     tabRetouch.classList.remove('active');
     tabThemes.classList.remove('active');
+    tabNetwork.classList.remove('active');
     paneTone.classList.remove('hidden');
     paneRetouch.classList.add('hidden');
     paneThemes.classList.add('hidden');
+    paneNetwork.classList.add('hidden');
     btnCompare.style.display = 'flex';
     studioState.activeTab = 'tone';
     saveStudioSettings();
@@ -1434,12 +1919,29 @@ function injectStudioUI() {
     tabThemes.classList.add('active');
     tabRetouch.classList.remove('active');
     tabTone.classList.remove('active');
+    tabNetwork.classList.remove('active');
     paneThemes.classList.remove('hidden');
     paneRetouch.classList.add('hidden');
     paneTone.classList.add('hidden');
+    paneNetwork.classList.add('hidden');
     btnCompare.style.display = 'none';
     studioState.activeTab = 'themes';
     saveStudioSettings();
+  });
+
+  tabNetwork.addEventListener('click', () => {
+    tabNetwork.classList.add('active');
+    tabRetouch.classList.remove('active');
+    tabTone.classList.remove('active');
+    tabThemes.classList.remove('active');
+    paneNetwork.classList.remove('hidden');
+    paneRetouch.classList.add('hidden');
+    paneTone.classList.add('hidden');
+    paneThemes.classList.add('hidden');
+    btnCompare.style.display = 'none';
+    studioState.activeTab = 'network';
+    saveStudioSettings();
+    updateNetworkDashboardUI();
   });
 
   // Retouch Event Listeners
@@ -1547,6 +2049,30 @@ function injectStudioUI() {
   window.addEventListener('mouseup', stopCompare);
   window.addEventListener('touchend', stopCompare);
 
+  // Network Guardian Event Listeners
+  const toggleGuardian = container.querySelector('#teamux-toggle-guardian');
+  const selectBandwidth = container.querySelector('#teamux-select-bandwidth');
+
+  toggleGuardian?.addEventListener('change', () => {
+    networkState.guardianEnabled = toggleGuardian.checked;
+    saveNetworkSettings();
+    if (!networkState.guardianEnabled && networkState.bandwidthMode === 'auto') {
+      applyQualityTier('720p');
+    } else {
+      evaluateAndApplyAdaptiveNetwork(networkState.currentRtt, networkState.currentLoss, networkState.currentBitrate);
+    }
+  });
+
+  selectBandwidth?.addEventListener('change', () => {
+    networkState.bandwidthMode = selectBandwidth.value;
+    saveNetworkSettings();
+    if (networkState.bandwidthMode === 'auto') {
+      evaluateAndApplyAdaptiveNetwork(networkState.currentRtt, networkState.currentLoss, networkState.currentBitrate);
+    } else {
+      applyQualityTier(networkState.bandwidthMode);
+    }
+  });
+
   // Minimize / Expand
   minBtn.addEventListener('click', () => {
     card.style.display = 'none';
@@ -1576,6 +2102,64 @@ function showStudioWidget() {
   }
 }
 
+function updateStudioPillNetworkBadge() {
+  if (!isTopFrame) return;
+  const badge = document.getElementById('teamux-pill-net-badge');
+  if (!badge) return;
+  const profile = QUALITY_PROFILES[networkState.currentTier] || QUALITY_PROFILES['720p'];
+  badge.textContent = profile.badge;
+  if (networkState.currentTier === 'audio-only') {
+    badge.style.background = '#dc2626';
+    badge.style.color = '#ffffff';
+  } else if (networkState.currentTier === '360p') {
+    badge.style.background = '#d97706';
+    badge.style.color = '#ffffff';
+  } else {
+    badge.style.background = 'rgba(255, 255, 255, 0.15)';
+    badge.style.color = '#e0e7ff';
+  }
+}
+
+function updateNetworkDashboardUI() {
+  if (!isTopFrame) return;
+  const rttEl = document.getElementById('teamux-net-rtt');
+  const lossEl = document.getElementById('teamux-net-loss');
+  const bweEl = document.getElementById('teamux-net-bwe');
+  const tierEl = document.getElementById('teamux-net-tier');
+  const statusEl = document.getElementById('teamux-net-badge-status');
+
+  if (rttEl) rttEl.textContent = `${networkState.currentRtt || 0} ms`;
+  if (lossEl) {
+    lossEl.textContent = `${networkState.currentLoss || 0}%`;
+    lossEl.style.color = (networkState.currentLoss || 0) > 5 ? '#f87171' : '#f4f4f5';
+  }
+  if (bweEl) {
+    bweEl.textContent = networkState.currentBitrate > 0 
+      ? `${Math.round(networkState.currentBitrate / 1000)} kbps` 
+      : '--';
+  }
+  if (tierEl) {
+    const prof = QUALITY_PROFILES[networkState.currentTier] || QUALITY_PROFILES['720p'];
+    tierEl.textContent = `${prof.icon} ${prof.badge}`;
+  }
+  if (statusEl) {
+    statusEl.className = 'teamux-status-badge';
+    if (networkState.networkQuality === 'critical' || networkState.currentTier === 'audio-only') {
+      statusEl.classList.add('teamux-status-critical');
+      statusEl.textContent = 'Audio-First Protection';
+    } else if (networkState.networkQuality === 'poor' || networkState.currentTier === '360p') {
+      statusEl.classList.add('teamux-status-poor');
+      statusEl.textContent = 'Eco (Constrained)';
+    } else if (networkState.networkQuality === 'moderate' || networkState.currentTier === '480p') {
+      statusEl.classList.add('teamux-status-moderate');
+      statusEl.textContent = 'Balanced';
+    } else {
+      statusEl.classList.add('teamux-status-good');
+      statusEl.textContent = 'Optimal';
+    }
+  }
+}
+
 function updateActiveCallBanner() {
   if (!isTopFrame) return;
   const banner = document.getElementById('teamux-call-banner');
@@ -1583,6 +2167,22 @@ function updateActiveCallBanner() {
 
   const isCallActive = activeStreams.size > 0;
   banner.style.display = isCallActive ? 'flex' : 'none';
+  if (!isCallActive) return;
+
+  const callText = banner.querySelector('#teamux-call-banner-text') || banner.firstElementChild;
+  if (networkState.audioFirstEngaged || networkState.currentTier === 'audio-only') {
+    banner.style.borderColor = '#ef4444';
+    banner.style.animation = 'teamuxPulseRed 2s infinite';
+    if (callText) callText.textContent = '🔴 Audio-First Protection Active (Low Bandwidth)';
+  } else if (networkState.currentTier === '360p') {
+    banner.style.borderColor = '#f59e0b';
+    banner.style.animation = 'teamuxPulseAmber 2.5s infinite';
+    if (callText) callText.textContent = '⚠️ Eco Saver Active (Constrained Network)';
+  } else {
+    banner.style.borderColor = '#22c55e';
+    banner.style.animation = 'teamuxPulse 2.5s infinite';
+    if (callText) callText.textContent = '🟢 Active Call in Progress';
+  }
 }
 
 // -------------------------------------------------------------

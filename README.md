@@ -1,18 +1,18 @@
-# Teamux 🐧
+# Teamux 🐧🪟
 
 <p align="center">
   <img src="assets/icon.png" alt="Teamux Logo" width="128" height="128" />
 </p>
 
 <p align="center">
-  <strong>Unofficial Microsoft Teams desktop client for Linux with native Wayland, PipeWire screen sharing, and camera support.</strong>
+  <strong>Unofficial Microsoft Teams desktop client for Linux and Windows with Adaptive Network Guardian, Studio Camera, and low-bandwidth optimization.</strong>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
-  <a href="#"><img src="https://img.shields.io/badge/platform-Linux%20x86__64-lightgrey.svg" alt="Supported Platforms"></a>
+  <a href="#"><img src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20x64-lightgrey.svg" alt="Supported Platforms"></a>
   <a href="#"><img src="https://img.shields.io/badge/display-Wayland%20%26%20X11-purple.svg" alt="Display Server Support"></a>
-  <a href="#"><img src="https://img.shields.io/badge/audio%2Fvideo-PipeWire%20%26%20V4L2-orange.svg" alt="Audio Video Support"></a>
+  <a href="#"><img src="https://img.shields.io/badge/audio%2Fvideo-PipeWire%20%26%20WebRTC-orange.svg" alt="Audio Video Support"></a>
 </p>
 
 > **Disclaimer:** Teamux is an unofficial project and is not affiliated with or endorsed by Microsoft. Microsoft Teams is a trademark of Microsoft Corporation.
@@ -21,68 +21,69 @@
 
 ## 💡 Why Teamux?
 
-On modern Linux distributions (Ubuntu 22.04+, Fedora 38+, Arch, Debian 12+), Microsoft Teams often fails:
-* **Screen sharing is disabled or yields a black screen** due to missing Wayland PipeWire flags and portal integration.
-* **Webcams and microphones fail or freeze** due to sandboxed snap/flatpak permission blocks or misconfigured V4L2 device nodes.
-* **"Your browser is not supported"** warnings appear because Microsoft blocks standard Electron user-agents.
+Standard Teams often struggles in demanding environments and branch offices:
+* **Meeting drops on low bandwidth:** When branch office internet links experience congestion, video calls stutter, drop frames, or freeze entirely.
+* **Wayland & PipeWire black screens:** Modern Linux desktops (Ubuntu 22.04+, Fedora 38+, Arch, Debian 12+) frequently experience black screens during screen sharing.
+* **Camera permission & resource leaks:** Camera devices either lock up or cause background CPU spikes when switching calls or hardware devices.
+* **Rigid UI styling:** No native OLED dark mode or low-contrast aesthetic options for extended workdays.
 
-**Teamux** solves all of these problems out of the box with zero manual flag tinkering required.
+**Teamux v1.0.0** solves all of these problems out of the box with zero manual flag tinkering required.
 
 ---
 
 ## ✨ Features
 
-- 🖥️ **Reliable Screen & Window Sharing:**
-  - Full native **Wayland** support via PipeWire and `xdg-desktop-portal`.
-  - Seamless fallback for **X11** display sessions.
-  - Interactive **Screen & Window Picker** dialog with live preview thumbnails.
-- 📹 **Camera & Audio Hardware Access:**
-  - Auto-granted WebRTC permissions for Video4Linux2 (`v4l2`) webcams.
-  - Native PulseAudio and PipeWire audio stream routing.
-  - Background audio persistence (calls do not mute when the window is behind other apps).
-- 🔔 **Linux Desktop Integration:**
-  - System Tray icon with dynamic unread message count badges.
-  - Quick tray controls: Show/Hide, Unread status, Reload, and Quit.
-  - Close-to-tray and Minimize-to-tray options.
-  - Auto-start minimized on boot.
-- ⚡ **GPU Hardware Acceleration:**
-  - Chromium hardware rasterization and VA-API hardware decoding for smooth video and background effects.
-- 🌐 **Modern Teams & Classic Support:**
-  - Supports New Teams v2 (Work & School) as well as Personal (Teams Live) accounts.
-  - User-Agent spoofing to unlock Microsoft's full feature set.
+- 🛡️ **Adaptive Network Guardian (Branch-Office Bandwidth Optimizer):**
+  - **Live WebRTC Telemetry:** Continuously tracks round-trip ping latency (RTT), packet loss percentage, and available outgoing bandwidth.
+  - **Dynamic Tier Scaling:** Automatically shifts camera feed between Full HD (720p @ 2.0 Mbps), Balanced (480p @ 500 kbps), and Eco Saver (360p @ 250 kbps).
+  - **Fail-Safe Audio-First Mode:** If network drops severely (>500ms ping or >15% packet loss), video upload is paused with a clean informational slate to prioritize 100% of bandwidth for uninterrupted call audio, smoothly recovering video when the link stabilizes.
+  - **Manual Bandwidth Presets:** Force specific bandwidth profiles directly from the in-meeting Studio widget or Settings.
+- ✨ **In-Meeting Studio Controller:**
+  - Real-time **Skin Smoothing (Beauty Filter)** with adjustable intensity.
+  - **Studio Lighting Enhancer** to balance dim webcams.
+  - **Portrait Vignette Focus** with soft radial contrast.
+  - Tone and color adjustments: **Contrast, Saturation, Shadow Lift, Warm Ambience**, and one-click **Grayscale**.
+  - **Hold-to-Compare** button to instantly preview raw camera output vs. enhanced stream.
+- 🎭 **Custom App Themes Engine:**
+  - Seamlessly injects curated UI themes into Teams: **OLED Pure Black, Catppuccin Mocha, Nord Frost, Tokyo Night, Dracula, and Rosé Pine**.
+- 🖥️ **Cross-Platform Linux & Windows:**
+  - Full native **Wayland** support via PipeWire and `xdg-desktop-portal` alongside X11 fallback.
+  - Windows standalone portable `.exe` and `.zip` distribution.
+  - Cross-platform System Tray icon with dynamic unread message count badges.
+  - Single-instance camera management and leak-free render loop architecture.
 
 ---
 
-## 📦 Multi-Distro Installation
+## 📦 Downloads & Installation (v1.0.0)
 
-Teamux provides native packages for all major Linux distributions:
+Download official v1.0.0 binaries directly from [Releases](https://github.com/quietbytehq/teamux/releases):
 
-### 1. Universal (Any Linux Distro) — AppImage
-Requires no installation or root privileges:
+### 🐧 Linux
+
+#### 1. Universal (Any Linux Distro) — AppImage
 ```bash
-# Download teamux-v0.2.0-linux-x86_64.AppImage from Releases
-chmod +x teamux-v0.2.0-linux-x86_64.AppImage
-./teamux-v0.2.0-linux-x86_64.AppImage
+chmod +x teamux-v1.0.0-linux-x86_64.AppImage
+./teamux-v1.0.0-linux-x86_64.AppImage
 ```
 
-### 2. Ubuntu / Debian / Linux Mint / Pop!_OS — `.deb`
+#### 2. Ubuntu / Debian / Linux Mint / Pop!_OS — `.deb`
 ```bash
-sudo dpkg -i teamux-v0.2.0-linux-amd64.deb
+sudo dpkg -i teamux-v1.0.0-linux-amd64.deb
 # Or using apt:
-sudo apt install ./teamux-v0.2.0-linux-amd64.deb
+sudo apt install ./teamux-v1.0.0-linux-amd64.deb
 ```
 
-### 3. Red Hat / Fedora / CentOS / Rocky Linux — `.rpm`
+#### 3. Portable Tarball — `.tar.gz`
 ```bash
-sudo dnf install ./teamux-v0.2.0-linux-x86_64.rpm
-# Or on openSUSE:
-sudo zypper install ./teamux-v0.2.0-linux-x86_64.rpm
+tar -xvf teamux-v1.0.0-linux-x64.tar.gz
+cd teamux-1.0.0
+./teamux
 ```
 
-### 4. Arch Linux / Manjaro / EndeavourOS — `.pacman`
-```bash
-sudo pacman -U teamux-v0.2.0-linux-x86_64.pacman
-```
+### 🪟 Windows
+
+* **Portable Executable:** Download and run `teamux-v1.0.0-windows-portable-x64.exe` (no installation required).
+* **Standalone Zip:** Download `teamux-v1.0.0-windows-x64.zip`, extract anywhere, and launch `Teamux.exe`.
 
 ---
 
@@ -91,7 +92,6 @@ sudo pacman -U teamux-v0.2.0-linux-x86_64.pacman
 ### Prerequisites
 * **Node.js** v20+ or v22+
 * **npm** v10+
-* Development tools (`rpm` and `libarchive-tools` if building cross-distro packages)
 
 ### 1. Clone Repository
 ```bash
@@ -101,7 +101,7 @@ cd teamux
 
 ### 2. Install Dependencies
 ```bash
-NODE_ENV=development npm install --include=dev
+npm install
 ```
 
 ### 3. Run Development Build
@@ -110,21 +110,17 @@ npm start
 ```
 
 ### 4. Build Distribution Packages
-Build your specific distribution package or all at once:
 ```bash
-# Build AppImage & Debian package
-npm run dist
+# Build Linux packages (AppImage, deb, tar.gz)
+npm run dist:linux
 
-# Build individual formats
-npm run dist:deb       # Debian / Ubuntu (.deb)
-npm run dist:rpm       # Fedora / Red Hat (.rpm)
-npm run dist:appimage  # Universal (.AppImage)
-npm run dist:pacman    # Arch Linux (.pacman)
+# Build Windows packages (portable .exe, zip)
+npm run dist:win
 
 # Build all packages simultaneously
-npm run dist:all
+npm run dist
 ```
-Generated installers will be output to the `dist/` folder.
+All compiled distributions are generated in the `dist/` directory.
 
 ---
 
@@ -134,11 +130,12 @@ Open Preferences with `Ctrl + ,` or from the **File > Preferences** menu:
 
 | Option | Description | Default |
 | :--- | :--- | :--- |
+| **Adaptive Guardian** | Automatically throttle video bandwidth to protect voice audio quality | `true` |
+| **Bandwidth Profile** | Video profile: Auto Adaptive, 720p Full HD, 480p Balanced, 360p Eco, or Audio-Only | `Auto (Adaptive)` |
 | **Teams Environment** | Switch between Work/School (New Teams v2) and Personal (Teams Live) | Work/School v2 |
-| **Keep running in tray** | Keep Teamux running in the system tray when window is closed | `true` |
+| **Keep running in tray** | Keep Teamux running in the system tray when window is closed | `false` |
 | **Minimize to tray** | Minimize window directly to the system tray | `true` |
-| **Hardware Acceleration** | GPU rasterization and VA-API video decode | `true` |
-| **Force Wayland** | Enforce native Wayland mode or auto-detect based on session | `auto` |
+| **Hardware Acceleration** | GPU rasterization and video decode acceleration | `true` |
 | **Unread Badges** | Display notification count badge on the tray icon and desktop dock | `true` |
 
 ---
@@ -153,9 +150,6 @@ If screen sharing does not trigger on your system, verify that PipeWire and the 
    sudo apt install xdg-desktop-portal xdg-desktop-portal-gnome  # (for GNOME)
    # Or for KDE:
    sudo apt install xdg-desktop-portal-kde
-
-   # On Fedora:
-   sudo dnf install xdg-desktop-portal xdg-desktop-portal-gnome
    ```
 
 2. **Verify PipeWire is running:**

@@ -11,12 +11,15 @@ function configureAppFlags(store) {
     app.disableHardwareAcceleration();
   }
 
-  // Ozone Platform hint (Wayland vs X11)
-  if (forceWayland) {
-    app.commandLine.appendSwitch('ozone-platform', 'wayland');
-  } else {
-    // 'auto' detects Wayland if WAYLAND_DISPLAY is present, else falls back to X11 cleanly
-    app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
+  // Linux-specific display server & PipeWire flags
+  if (process.platform === 'linux') {
+    if (forceWayland) {
+      app.commandLine.appendSwitch('ozone-platform', 'wayland');
+    } else {
+      app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
+    }
+    app.commandLine.appendSwitch('enable-webrtc-pipewire-capturer');
+    app.commandLine.appendSwitch('enable-wayland-ime');
   }
 
   // -----------------------------------------------------------
@@ -35,14 +38,11 @@ function configureAppFlags(store) {
   app.commandLine.appendSwitch('disable-domain-reliability');
   app.commandLine.appendSwitch('disable-sync');
 
-  // 4. Features to enable / disable for low footprint, stable Wayland display, and fast media
-  // Note: CanvasOopRasterization and WaylandWindowDecorations are intentionally omitted:
-  // - CanvasOopRasterization causes GPU IPC deadlocks with canvas filter pipelines on hybrid Intel/NVIDIA Linux
-  // - WaylandWindowDecorations breaks on GNOME Wayland which strictly mandates CSD (client-side decorations)
-  const enableFeatures = [
-    'WebRTCPipeWireCapturer',
-    'PulseaudioLoopbackForCast'
-  ];
+  // 4. Features to enable / disable for low footprint, stable display, and fast media
+  const enableFeatures = [];
+  if (process.platform === 'linux') {
+    enableFeatures.push('WebRTCPipeWireCapturer', 'PulseaudioLoopbackForCast');
+  }
 
   const disableFeatures = [
     'MediaRouter',
@@ -51,15 +51,13 @@ function configureAppFlags(store) {
     'OptimizationHints'
   ];
 
-  app.commandLine.appendSwitch('enable-features', enableFeatures.join(','));
+  if (enableFeatures.length > 0) {
+    app.commandLine.appendSwitch('enable-features', enableFeatures.join(','));
+  }
   app.commandLine.appendSwitch('disable-features', disableFeatures.join(','));
-  app.commandLine.appendSwitch('enable-webrtc-pipewire-capturer');
 
   // Audio / Media auto-play policy for uninterrupted calls
   app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
-
-  // Input method support for Wayland
-  app.commandLine.appendSwitch('enable-wayland-ime');
 }
 
 module.exports = { configureAppFlags };

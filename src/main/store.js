@@ -20,6 +20,8 @@ class SettingsStore {
       isMaximized: false,
       enableUnreadBadges: true,
       enableNotifications: true,
+      adaptiveNetworkGuardian: true,
+      bandwidthMode: 'auto',
       configVersion: 2
     };
     this.data = this.load();
