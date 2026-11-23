@@ -55,6 +55,7 @@ Standard Teams often struggles in demanding environments and branch offices:
 ---
 
 ## 📦 Downloads & Installation (v1.0.0)
+**Documentation:** [User Guide (PDF)](docs/Teamux_User_Guide_v1.0.0.pdf) · [Admin Guide (PDF)](docs/Teamux_Admin_Guide_v1.0.0.pdf)
 
 Download official v1.0.0 binaries directly from [Releases](https://github.com/quietbytehq/teamux/releases):
 
