@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Teamux v1.0.0 Official User Guide & Feature Manual PDF Generator
+Teamux v1.0.0 Official User Guide & Picture-Based Feature Manual PDF Generator
 Authored by Quiet Byte (2026)
 """
 
@@ -14,8 +14,8 @@ ICON_PATH = "/home/faisal/projects/quietbyte/Teamux/assets/icon.png"
 HTML_OUTPUT = os.path.join(DOCS_DIR, "Teamux_User_Guide_v1.0.0.html")
 PDF_OUTPUT = os.path.join(DOCS_DIR, "Teamux_User_Guide_v1.0.0.pdf")
 USER_PDF_COPY = "/home/faisal/Teamux_User_Guide_v1.0.0.pdf"
+GAMES_PDF_COPY = "/home/faisal/Games/Teamux_User_Guide_v1.0.0.pdf"
 
-# Read icon as base64
 with open(ICON_PATH, "rb") as f:
     icon_b64 = base64.b64encode(f.read()).decode("utf-8")
 
@@ -23,90 +23,85 @@ html_content = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Teamux v1.0.0 — Official User Guide & Feature Manual</title>
+<title>Teamux v1.0.0 — Official User Guide &amp; Feature Manual</title>
 <style>
   @page {{
     size: A4;
-    margin: 16mm 14mm 16mm 14mm;
+    margin: 10mm 11mm 11mm 11mm;
     @bottom-right {{
-      content: "Page " counter(page);
-      font-size: 9pt;
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 8pt;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       color: #64748b;
     }}
     @bottom-left {{
       content: "Teamux v1.0.0 — Official User Guide (Quiet Byte)";
-      font-size: 8.5pt;
+      font-size: 8pt;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       color: #64748b;
     }}
   }}
 
+  * {{ box-sizing: border-box; }}
+
   body {{
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
     color: #1e293b;
     background: #ffffff;
-    line-height: 1.55;
-    font-size: 10pt;
+    line-height: 1.33;
+    font-size: 8.8pt;
     margin: 0;
     padding: 0;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }}
 
-  /* Page Break Helpers */
-  .page-break {{
-    page-break-before: always;
-  }}
-  .avoid-break {{
-    page-break-inside: avoid;
-  }}
+  .avoid-break {{ page-break-inside: avoid; }}
 
   /* Cover / Header Section */
   .cover-header {{
     background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 60%, #312e81 100%);
     color: #ffffff;
     border-radius: 12px;
-    padding: 24px 28px;
-    margin-bottom: 24px;
+    padding: 18px 22px;
+    margin-bottom: 14px;
     box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
     display: flex;
     align-items: center;
     justify-content: space-between;
   }}
-  .cover-info {{
-    max-width: 72%;
-  }}
+  .cover-info {{ max-width: 74%; }}
   .cover-title {{
-    font-size: 24pt;
+    font-size: 22pt;
     font-weight: 800;
     letter-spacing: -0.5px;
-    margin: 0 0 4px 0;
+    margin: 0 0 3px 0;
     color: #ffffff;
   }}
   .cover-subtitle {{
-    font-size: 12pt;
+    font-size: 11pt;
     font-weight: 400;
     color: #c7d2fe;
-    margin: 0 0 12px 0;
-    line-height: 1.35;
+    margin: 0 0 10px 0;
+    line-height: 1.3;
   }}
   .cover-meta {{
-    font-size: 8.5pt;
-    color: #94a3b8;
+    font-size: 8pt;
     display: flex;
-    gap: 16px;
+    gap: 8px;
     flex-wrap: wrap;
   }}
   .cover-meta span {{
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.14);
     padding: 3px 8px;
     border-radius: 6px;
     color: #f8fafc;
     font-weight: 500;
   }}
   .cover-logo {{
-    width: 96px;
-    height: 96px;
-    border-radius: 20px;
+    width: 82px;
+    height: 82px;
+    border-radius: 18px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
     background: #ffffff;
     padding: 4px;
@@ -116,84 +111,63 @@ html_content = f"""<!DOCTYPE html>
   h1, h2, h3, h4 {{
     color: #0f172a;
     font-weight: 700;
-    margin-top: 20px;
-    margin-bottom: 8px;
+    margin-top: 7px;
+    margin-bottom: 3px;
+    page-break-after: avoid;
   }}
   h1 {{
-    font-size: 16pt;
+    font-size: 13.5pt;
     border-bottom: 2px solid #e2e8f0;
-    padding-bottom: 6px;
+    padding-bottom: 3px;
     color: #1e1b4b;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
   }}
   h2 {{
-    font-size: 13pt;
+    font-size: 10.8pt;
     color: #312e81;
-    margin-top: 16px;
+    margin-top: 8px;
   }}
-  h3 {{
-    font-size: 11pt;
-    color: #0f172a;
-  }}
-  p {{
-    margin: 0 0 8px 0;
-  }}
+  p {{ margin: 0 0 4px 0; }}
+  ul, ol {{ margin: 3px 0 4px 0; padding-left: 16px; }}
+  li {{ margin-bottom: 1.5px; }}
 
   /* Callout Boxes */
   .callout {{
-    padding: 10px 14px;
+    padding: 8px 12px;
     border-radius: 8px;
-    margin: 12px 0;
-    font-size: 9.5pt;
-    line-height: 1.45;
+    margin: 8px 0;
+    font-size: 9pt;
+    line-height: 1.4;
   }}
-  .callout-info {{
-    background: #eff6ff;
-    border-left: 4px solid #3b82f6;
-    color: #1e40af;
-  }}
-  .callout-success {{
-    background: #f0fdf4;
-    border-left: 4px solid #22c55e;
-    color: #15803d;
-  }}
-  .callout-warning {{
-    background: #fffbeb;
-    border-left: 4px solid #f59e0b;
-    color: #b45309;
-  }}
-  .callout-danger {{
-    background: #fef2f2;
-    border-left: 4px solid #ef4444;
-    color: #b91c1c;
-  }}
+  .callout-info {{ background: #eff6ff; border-left: 4px solid #3b82f6; color: #1e40af; }}
+  .callout-warning {{ background: #fffbeb; border-left: 4px solid #f59e0b; color: #92400e; }}
 
   /* Step Boxes */
   .step-box {{
     background: #f8fafc;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
-    padding: 12px 14px;
-    margin-bottom: 10px;
+    padding: 9px 12px;
+    margin-bottom: 8px;
   }}
   .step-title {{
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 10.5pt;
+    gap: 7px;
+    font-size: 10pt;
     font-weight: 700;
     color: #1e293b;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
   }}
   .step-badge {{
     background: #4f46e5;
     color: #ffffff;
     font-size: 8pt;
     font-weight: 800;
-    width: 20px;
-    height: 20px;
+    width: 19px;
+    height: 19px;
     border-radius: 50%;
     display: inline-flex;
     align-items: center;
@@ -205,40 +179,36 @@ html_content = f"""<!DOCTYPE html>
   .grid-2 {{
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    margin: 10px 0;
+    gap: 8px;
+    margin: 8px 0;
   }}
   .card {{
     background: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
-    padding: 12px 14px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    padding: 9px 11px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
   }}
   .card-title {{
-    font-size: 10.5pt;
+    font-size: 10pt;
     font-weight: 700;
     color: #1e1b4b;
-    margin-bottom: 4px;
+    margin-bottom: 3px;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
   }}
-  .card-body {{
-    font-size: 9pt;
-    color: #475569;
-    line-height: 1.45;
-  }}
+  .card-body {{ font-size: 8.8pt; color: #475569; line-height: 1.4; }}
 
   /* Tables */
   table {{
     width: 100%;
     border-collapse: collapse;
-    margin: 12px 0;
-    font-size: 9pt;
+    margin: 8px 0;
+    font-size: 8.6pt;
   }}
   th, td {{
-    padding: 7px 10px;
+    padding: 3.5px 7px;
     text-align: left;
     border-bottom: 1px solid #e2e8f0;
   }}
@@ -246,60 +216,282 @@ html_content = f"""<!DOCTYPE html>
     background: #f1f5f9;
     color: #1e293b;
     font-weight: 700;
-    font-size: 8.5pt;
+    font-size: 8pt;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.4px;
   }}
-  tr:nth-child(even) td {{
-    background: #f8fafc;
-  }}
+  tr:nth-child(even) td {{ background: #f8fafc; }}
 
   /* Code Blocks */
   code {{
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 8.5pt;
+    font-size: 8.3pt;
     background: #f1f5f9;
-    padding: 2px 5px;
+    padding: 1px 4px;
     border-radius: 4px;
-    color: #475569;
+    color: #334155;
   }}
   pre {{
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 8.5pt;
+    font-size: 8.2pt;
     background: #0f172a;
     color: #e2e8f0;
-    padding: 9px 12px;
+    padding: 7px 10px;
     border-radius: 6px;
-    overflow-x: hidden;
-    margin: 8px 0;
-    line-height: 1.4;
+    margin: 5px 0;
+    line-height: 1.35;
+    white-space: pre-wrap;
   }}
 
   /* Status Badges */
   .badge {{
     display: inline-block;
-    padding: 2px 7px;
-    border-radius: 12px;
-    font-size: 8pt;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-size: 7.8pt;
     font-weight: 700;
     color: white;
+    white-space: nowrap;
   }}
   .badge-720p {{ background: #2563eb; }}
   .badge-480p {{ background: #059669; }}
   .badge-360p {{ background: #d97706; }}
   .badge-audio {{ background: #dc2626; }}
 
-  /* Footer Disclaimer */
-  .disclaimer-box {{
-    margin-top: 24px;
-    padding: 10px 14px;
-    border-radius: 8px;
+  /* Callout Pins for Picture-Based UI Diagrams */
+  .pin {{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 17px;
+    height: 17px;
+    border-radius: 50%;
+    background: #e11d48;
+    color: #ffffff;
+    font-size: 7.8pt;
+    font-weight: 800;
+    flex-shrink: 0;
+    border: 1.5px solid #ffffff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.35);
+  }}
+  .pin-inline {{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #e11d48;
+    color: #ffffff;
+    font-size: 7.5pt;
+    font-weight: 800;
+    margin-right: 4px;
+    vertical-align: middle;
+  }}
+
+  /* Visual UI Split Layout */
+  .ui-split {{
+    display: grid;
+    grid-template-columns: 305px 1fr;
+    gap: 12px;
+    align-items: start;
+    margin: 7px 0 10px 0;
+  }}
+  .explain-stack {{
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }}
+  .explain-item {{
     background: #f8fafc;
     border: 1px solid #e2e8f0;
-    font-size: 8pt;
-    color: #64748b;
+    border-radius: 7px;
+    padding: 6px 9px;
+    font-size: 8.6pt;
+    line-height: 1.38;
+  }}
+
+  /* Pixel-Accurate Teamux Studio Mockups */
+  .studio-card {{
+    background: #141418;
+    border: 1.5px solid rgba(99, 102, 241, 0.55);
+    border-radius: 10px;
+    width: 305px;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.25);
+    color: #f4f4f5;
+    overflow: hidden;
+    font-size: 11px;
+  }}
+  .studio-header {{
+    padding: 7px 11px;
+    background: #24242a;
+    border-bottom: 1px solid #3f3f46;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }}
+  .studio-title {{ font-size: 11.5px; font-weight: 700; color: #c7d2fe; }}
+  .studio-min {{ color: #a1a1aa; font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 4px; }}
+  .studio-tabs {{
+    display: flex;
+    background: #1e1e24;
+    border-bottom: 1px solid #3f3f46;
+  }}
+  .studio-tab {{
+    flex: 1;
+    padding: 6px 3px;
+    font-size: 10px;
+    font-weight: 600;
     text-align: center;
-    line-height: 1.4;
+    color: #a1a1aa;
+    border-bottom: 2px solid transparent;
+  }}
+  .studio-tab.active {{
+    color: #818cf8;
+    border-bottom-color: #6366f1;
+    background: rgba(99, 102, 241, 0.12);
+  }}
+  .studio-body {{
+    padding: 7px 9px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }}
+  .t-row {{ display: flex; align-items: center; justify-content: space-between; font-size: 11px; }}
+  .t-label {{ display: flex; align-items: center; gap: 5px; }}
+  .sw {{
+    width: 34px; height: 18px; border-radius: 18px; background: #3f3f46; position: relative; flex-shrink: 0;
+  }}
+  .sw.on {{ background: #6366f1; }}
+  .sw::after {{
+    content: ""; position: absolute; width: 12px; height: 12px; border-radius: 50%; background: #fff; top: 3px; left: 3px;
+  }}
+  .sw.on::after {{ left: 19px; }}
+  .rng-group {{ display: flex; flex-direction: column; gap: 3px; }}
+  .rng-lbl {{ display: flex; justify-content: space-between; font-size: 10.5px; color: #a1a1aa; }}
+  .rng-track {{ height: 4.5px; border-radius: 5px; background: #3f3f46; position: relative; }}
+  .rng-fill {{ height: 100%; border-radius: 5px; background: #6366f1; position: relative; }}
+  .rng-thumb {{
+    width: 11px; height: 11px; border-radius: 50%; background: #818cf8; border: 2px solid #fff;
+    position: absolute; right: -5px; top: -3.2px;
+  }}
+  .btn-compare {{
+    background: #27272a; border: 1px solid #3f3f46; color: #e4e4e7;
+    padding: 6px 8px; border-radius: 6px; font-size: 10.5px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; gap: 5px;
+  }}
+  .btn-reset {{
+    background: #1f1f23; border: 1px solid #3f3f46; color: #a1a1aa;
+    padding: 4px 8px; border-radius: 6px; font-size: 10px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; gap: 5px;
+  }}
+  .hint-box-dark {{
+    font-size: 9.5px; color: #94a3b8; background: rgba(30, 41, 59, 0.7);
+    border: 1px solid rgba(51, 65, 85, 0.8); border-radius: 5px; padding: 5px 7px; line-height: 1.3;
+  }}
+  .net-select {{
+    width: 100%; background: #24242a; border: 1px solid #3f3f46; color: #f4f4f5;
+    padding: 4px 7px; border-radius: 5px; font-size: 10.5px;
+    display: flex; justify-content: space-between; align-items: center;
+  }}
+  .net-dash {{
+    background: #18181b; border: 1px solid #3f3f46; border-radius: 7px; padding: 7px;
+    display: flex; flex-direction: column; gap: 5px;
+  }}
+  .net-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }}
+  .net-stat {{ background: #27272a; padding: 4px 6px; border-radius: 5px; }}
+  .net-lbl {{ font-size: 8.5px; color: #a1a1aa; }}
+  .net-val {{ font-size: 11px; font-weight: 700; color: #f4f4f5; }}
+  .st-badge {{ font-size: 8.5px; font-weight: 700; padding: 1.5px 5px; border-radius: 7px; color: #fff; background: #16a34a; }}
+
+  /* Theme Cards inside Mockup */
+  .theme-card {{
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 3px 6px; background: rgba(36, 36, 42, 0.85);
+    border: 1px solid rgba(63, 63, 70, 0.6); border-radius: 6px;
+  }}
+  .theme-card.active {{ background: rgba(99, 102, 241, 0.2); border-color: #818cf8; }}
+  .theme-title {{ font-size: 10.5px; font-weight: 700; color: #f4f4f5; }}
+  .theme-desc {{ font-size: 8.5px; color: #a1a1aa; }}
+  .theme-badge {{ font-size: 8px; font-weight: 700; padding: 1px 4px; border-radius: 7px; background: #4f46e5; color: #fff; margin-left: 3px; }}
+  .swatches {{ display: flex; gap: 3px; }}
+  .dot {{ width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.3); }}
+
+  /* Simulated Teams Window & Visuals */
+  .teams-mock {{
+    background: #1f1f23; border-radius: 9px; border: 1px solid #334155;
+    padding: 8px; position: relative; height: 170px; color: #e2e8f0; margin: 7px 0;
+  }}
+  .teams-topbar {{
+    display: flex; justify-content: space-between; align-items: center;
+    background: #141418; padding: 4px 9px; border-radius: 5px; font-size: 8pt; margin-bottom: 6px;
+  }}
+  .call-banner-mock {{
+    background: rgba(15, 23, 42, 0.95); border: 1.5px solid #22c55e; border-radius: 16px;
+    padding: 2px 9px; display: inline-flex; align-items: center; gap: 6px; font-size: 7.8pt; font-weight: 600; color: #fff;
+  }}
+  .call-pill-btn {{
+    background: #22c55e; color: #0f172a; font-weight: 800; padding: 1px 6px; border-radius: 8px; font-size: 7pt;
+  }}
+  .video-grid-mock {{ display: grid; grid-template-columns: 1fr 1fr; gap: 7px; height: 110px; }}
+  .participant-box {{
+    background: linear-gradient(145deg, #27272a, #18181b); border-radius: 7px; border: 1px solid #3f3f46;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }}
+  .avatar-circle {{
+    width: 34px; height: 34px; border-radius: 50%; background: #4f46e5; color: #fff;
+    font-weight: 800; font-size: 11pt; display: flex; align-items: center; justify-content: center;
+  }}
+  .studio-pill-mock {{
+    position: absolute; bottom: 10px; right: 10px;
+    background: rgba(30, 27, 75, 0.95); border: 1.5px solid #818cf8; color: #fff;
+    padding: 4px 10px; border-radius: 16px; font-size: 8.5pt; font-weight: 700;
+    display: flex; align-items: center; gap: 5px; box-shadow: 0 3px 10px rgba(0,0,0,0.5);
+  }}
+  .pill-net-tag {{ background: rgba(255,255,255,0.18); padding: 1px 5px; border-radius: 6px; font-size: 7pt; }}
+
+  /* Audio Slate + Banner Visual */
+  .audio-slate {{
+    background: #0f172a; border: 2px solid #ef4444; border-radius: 8px;
+    height: 92px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 8px;
+  }}
+
+  /* Preferences Mockup */
+  .settings-mock {{
+    background: #1e1e24; color: #f4f4f5; border-radius: 8px; padding: 9px;
+    border: 1px solid #3f3f46; font-size: 8.2pt;
+  }}
+  .settings-sec {{
+    background: #27272d; border: 1px solid #3f3f46; border-radius: 6px; padding: 7px 9px;
+  }}
+  .chk-row {{ display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }}
+  .chk-box {{
+    width: 13px; height: 13px; border-radius: 3px; background: #6366f1; color: #fff;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 8pt; font-weight: 800; flex-shrink: 0;
+  }}
+
+  /* Theme Gallery */
+  .theme-gallery {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 6px 0; }}
+  .mini-app {{ border-radius: 7px; overflow: hidden; border: 1px solid #cbd5e1; font-size: 7.5pt; }}
+  .mini-app-bar {{ padding: 3px 6px; font-weight: 700; display: flex; justify-content: space-between; align-items: center; }}
+  .mini-app-body {{ display: grid; grid-template-columns: 35% 65%; height: 42px; }}
+  .mini-side {{ padding: 4px; font-size: 6.5pt; }}
+  .mini-main {{ padding: 4px; display: flex; flex-direction: column; justify-content: space-between; }}
+  .mini-btn {{ display: inline-block; padding: 1.5px 5px; border-radius: 3px; font-size: 6.5pt; font-weight: 700; align-self: flex-end; }}
+
+  /* Before / After Camera Mockup */
+  .cam-compare {{ display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0; }}
+  .cam-frame {{ border-radius: 7px; padding: 7px; text-align: center; border: 1px solid #cbd5e1; display: flex; align-items: center; gap: 10px; }}
+  .cam-raw {{ background: linear-gradient(180deg, #334155 0%, #1e293b 100%); color: #cbd5e1; }}
+  .cam-studio {{ background: radial-gradient(circle at 30% 50%, #475569 0%, #1e1b4b 75%, #09090b 100%); color: #f8fafc; border-color: #6366f1; }}
+  .cam-face {{ width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14pt; flex-shrink: 0; }}
+
+  /* Footer Disclaimer */
+  .disclaimer-box {{
+    margin-top: 6px; padding: 6px 10px; border-radius: 7px;
+    background: #f8fafc; border: 1px solid #e2e8f0;
+    font-size: 7.5pt; color: #64748b; text-align: center; line-height: 1.3;
   }}
 </style>
 </head>
@@ -309,7 +501,7 @@ html_content = f"""<!DOCTYPE html>
 <div class="cover-header">
   <div class="cover-info">
     <div class="cover-title">Teamux v1.0.0</div>
-    <div class="cover-subtitle">Official User Guide & Comprehensive Feature Manual</div>
+    <div class="cover-subtitle">Official User Guide &amp; Visual Feature Manual</div>
     <div class="cover-meta">
       <span>Release: v1.0.0 (Production)</span>
       <span>Platforms: Linux (x64) &amp; Windows (x64)</span>
@@ -320,167 +512,168 @@ html_content = f"""<!DOCTYPE html>
   <img class="cover-logo" src="data:image/png;base64,{icon_b64}" alt="Teamux Logo">
 </div>
 
-<!-- SECTION 1: INTRODUCTION & OVERVIEW -->
-<h1><span>1.</span> Introduction &amp; Core Highlights</h1>
+<!-- SECTION 1: INTRODUCTION & VISUAL MAP -->
+<h1><span>1.</span> Introduction, Core Highlights &amp; Interface Map</h1>
 <p>
-  <strong>Teamux</strong> is an unofficial, high-performance desktop client for Microsoft Teams engineered specifically for demanding enterprise workflows, branch-office internet environments, and modern Linux and Windows desktops.
+  <strong>Teamux</strong> is an unofficial, high-performance desktop client for Microsoft Teams engineered for demanding workflows, low-bandwidth branch offices, and modern Linux and Windows desktops. You sign in with your regular Microsoft Teams account—all chats, channels, and meetings remain identical.
 </p>
 
 <div class="grid-2 avoid-break">
   <div class="card">
     <div class="card-title">🛡️ Adaptive Network Guardian</div>
-    <div class="card-body">
-      Real-time WebRTC telemetry monitoring that continuously tracks RTT latency, packet loss, and available bandwidth. Auto-scales video from 720p to 480p and 360p, with an emergency <strong>Audio-First Mode</strong> that cuts video upload to 0 kbps so voice audio never drops.
-    </div>
+    <div class="card-body">Tracks latency, packet loss, and bandwidth every 2.5s. Auto-scales video (720p &rarr; 480p &rarr; 360p) or engages <strong>Audio-First Mode</strong> (0 kbps video) so voice audio never drops.</div>
   </div>
   <div class="card">
     <div class="card-title">🧊 Zero-Freeze &amp; Instant Exit</div>
-    <div class="card-body">
-      Re-engineered process architecture featuring single-instance camera lifecycle tracking, display-synced frame callbacks, top-frame iframe isolation, a double-close escape hatch, and a 1.5-second forced exit watchdog timer.
-    </div>
+    <div class="card-body">Single-instance camera lifecycle, display-synced frame callbacks, top-frame isolation, a double-close escape hatch (<code>X</code> twice in 2.5s), and a 1.5s forced exit watchdog.</div>
   </div>
   <div class="card">
     <div class="card-title">✨ In-Meeting Studio Beauty Cam</div>
-    <div class="card-body">
-      Built-in virtual camera processing right inside Teams: skin tone smoothing, studio lighting booster, portrait vignette focus, and full tone grading (contrast, saturation, shadow lift, warm ambience glow, and monochrome grayscale).
-    </div>
+    <div class="card-body">Built-in webcam enhancements inside Teams: skin smoothing, studio lighting booster, portrait vignette, tone grading (contrast, saturation, shadow lift, warm glow), and grayscale.</div>
   </div>
   <div class="card">
     <div class="card-title">🎭 Custom Themes Engine</div>
-    <div class="card-body">
-      Seamlessly injects 6 curated UI themes directly into Teams: OLED Pure Black (battery saver), Catppuccin Mocha, Nord Frost, Tokyo Night, Dracula, and Rosé Pine.
+    <div class="card-body">Restyles Teams in real time with 7 themes: Teams Default, OLED Midnight, Catppuccin Mocha, Nord Frost, Tokyo Night, Dracula, and Rosé Pine.</div>
+  </div>
+</div>
+
+<!-- Visual Map of Teams Window -->
+<div class="teams-mock avoid-break">
+  <div class="teams-topbar">
+    <span><strong>Microsoft Teams (Teamux)</strong> — Weekly Branch Sync</span>
+    <div class="call-banner-mock">
+      <span class="pin">1</span>
+      <span>🟢 Active Call in Progress</span>
+      <span class="call-pill-btn">RETURN TO MEETING</span>
+    </div>
+    <span>🔴 Leave</span>
+  </div>
+  <div class="video-grid-mock">
+    <div class="participant-box">
+      <div class="avatar-circle">A</div>
+      <div style="margin-top:4px; font-size:8pt; font-weight:600;">Aleena (Branch Office)</div>
+      <div style="font-size:7pt; color:#94a3b8;">🎤 Speaking...</div>
+    </div>
+    <div class="participant-box" style="border-color:#6366f1;">
+      <div class="avatar-circle" style="background:#0ea5e9;">You</div>
+      <div style="margin-top:4px; font-size:8pt; font-weight:600;">Your Camera (Studio Active)</div>
+      <div style="font-size:7pt; color:#a5b4fc;">✨ Beauty + Studio Light ON</div>
+    </div>
+  </div>
+  <div class="studio-pill-mock">
+    <span class="pin">2</span>
+    <span>✨ Studio</span>
+    <span class="pill-net-tag">720p</span>
+  </div>
+</div>
+
+<div class="grid-2 avoid-break" style="margin-top:4px;">
+  <div class="explain-item"><span class="pin-inline">1</span><strong>Top Call &amp; Network Banner:</strong> Appears during calls (Green = Normal, Amber = Eco, Red = Audio-First). Click anytime to jump back to your meeting.</div>
+  <div class="explain-item"><span class="pin-inline">2</span><strong>Floating Studio Pill (Bottom-Right):</strong> Shows your live video tier (<code>720p</code>, <code>480p</code>, <code>360p</code>, <code>Voice Only</code>). Click to open the 4-tab Studio panel.</div>
+</div>
+
+<!-- SECTION 2: INSTALLATION -->
+<h1><span>2.</span> Step-by-Step Installation &amp; Setup</h1>
+
+<div class="grid-2 avoid-break">
+  <div class="step-box" style="margin-bottom:0;">
+    <div class="step-title"><span class="step-badge">🐧</span> Linux (AppImage / .deb / .tar.gz)</div>
+    <p><strong>Universal AppImage (No root required):</strong></p>
+    <pre>chmod +x teamux-v1.0.0-linux-x86_64.AppImage
+./teamux-v1.0.0-linux-x86_64.AppImage</pre>
+    <p><strong>Ubuntu / Debian (.deb):</strong></p>
+    <pre>sudo apt install ./teamux-v1.0.0-linux-amd64.deb</pre>
+  </div>
+  <div class="step-box" style="margin-bottom:0;">
+    <div class="step-title"><span class="step-badge">🪟</span> Windows (Portable .exe / .zip)</div>
+    <p><strong>1. Portable Single-File (.exe):</strong> Download <code>teamux-v1.0.0-windows-portable-x64.exe</code> and double-click to launch immediately. <strong>No installer or admin rights required.</strong></p>
+    <p style="margin-top:6px;"><strong>2. Standalone Zip (.zip):</strong> Download <code>teamux-v1.0.0-windows-x64.zip</code>, extract anywhere (e.g. <code>C:\\Apps\\Teamux</code>), and run <code>Teamux.exe</code>.</p>
+  </div>
+</div>
+
+<!-- SECTION 3: SIGNING IN & NAVIGATION -->
+<h1><span>3.</span> Signing In, System Tray &amp; Clean Exit</h1>
+
+<div class="step-box avoid-break">
+  <div class="step-title"><span class="step-badge">1</span> Teams Environment &amp; MFA Login</div>
+  <p>Supports both <strong>Work / School (New Teams v2 — teams.cloud.microsoft)</strong> and <strong>Personal (Teams Live — teams.live.com)</strong>, including Microsoft Authenticator, FIDO2 keys, and SSO. Switch editions anytime via <strong>Preferences (<code>Ctrl + ,</code>)</strong>.</p>
+</div>
+
+<div class="step-box avoid-break">
+  <div class="step-title"><span class="step-badge">2</span> System Tray Controls &amp; Double-Close Escape Hatch</div>
+  <ul>
+    <li><strong>System Tray Menu:</strong> Right-click the tray icon for <code>Show/Hide</code>, <code>Unread Messages</code>, <code>Reload Teams</code>, <code>Preferences</code>, and <code>Quit Teamux</code>.</li>
+    <li><strong>⚡ Double-Close Escape Hatch:</strong> Click the window close button (<code>X</code>) <strong>twice within 2.5 seconds</strong> to bypass tray behavior and terminate all processes immediately (backed by a 1.5s fail-safe shutdown timer).</li>
+  </ul>
+</div>
+
+<!-- SECTION 4: BANDWIDTH CONTROL (AUTO & MANUAL) -->
+<h1><span>4.</span> Bandwidth Control: Auto &amp; Manual Modes (🌐 Network Tab)</h1>
+<p>
+  On slow branch-office internet links, high-definition video can choke your upload speed—causing robotic audio and dropped calls. Teamux gives you both <strong>Auto Mode</strong> (Adaptive Network Guardian) and <strong>Manual Mode</strong> (lock a fixed speed).
+</p>
+
+<div class="ui-split avoid-break">
+  <!-- Studio Network Mockup -->
+  <div class="studio-card">
+    <div class="studio-header">
+      <div class="studio-title">✨ Teamux Studio</div>
+      <div class="studio-min">&minus;</div>
+    </div>
+    <div class="studio-tabs">
+      <div class="studio-tab">✨ Retouch</div>
+      <div class="studio-tab">🎨 Tone</div>
+      <div class="studio-tab">🎭 Themes</div>
+      <div class="studio-tab active">🌐 Network</div>
+    </div>
+    <div class="studio-body">
+      <div class="t-row">
+        <div class="t-label"><span class="pin">1</span><span>Adaptive Guardian</span></div>
+        <div class="sw on"></div>
+      </div>
+      <div class="rng-group">
+        <div class="rng-lbl"><span><span class="pin-inline">2</span>Bandwidth Profile</span></div>
+        <div class="net-select"><span>Auto (Dynamic Guardian)</span><span>&#9662;</span></div>
+      </div>
+      <div class="net-dash">
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:10px; font-weight:700;">
+          <span><span class="pin-inline">3</span>Live WebRTC Telemetry</span>
+          <span class="st-badge">Optimal</span>
+        </div>
+        <div class="net-grid">
+          <div class="net-stat"><div class="net-lbl">Latency (RTT)</div><div class="net-val">42 ms</div></div>
+          <div class="net-stat"><div class="net-lbl">Packet Loss</div><div class="net-val">0%</div></div>
+          <div class="net-stat"><div class="net-lbl">Est. Bandwidth</div><div class="net-val">2400 kbps</div></div>
+          <div class="net-stat"><div class="net-lbl">Active Video Stream</div><div class="net-val">🚀 720p</div></div>
+        </div>
+      </div>
+      <div class="hint-box-dark">🛡️ When branch network is constrained, video throttles automatically to guarantee 100% voice clarity.</div>
+    </div>
+  </div>
+
+  <div class="explain-stack">
+    <div class="explain-item">
+      <span class="pin-inline">1</span><strong>Adaptive Guardian Toggle (Auto Mode):</strong><br>
+      When ON (default), Teamux measures your connection every <strong>2.5 seconds</strong> and adjusts video quality automatically without dropping the call.
+    </div>
+    <div class="explain-item">
+      <span class="pin-inline">2</span><strong>Bandwidth Profile Dropdown (Auto vs. Manual):</strong><br>
+      Keep on <strong>Auto (Dynamic Guardian)</strong> for automatic protection, or pick a fixed preset to lock your speed manually:
+      <code>720p Full HD</code>, <code>480p Balanced</code>, <code>360p Eco Saver</code>, or <code>Audio-First Priority</code>.
+    </div>
+    <div class="explain-item">
+      <span class="pin-inline">3</span><strong>Live WebRTC Telemetry Card:</strong><br>
+      Shows real-time <strong>Latency (RTT ms)</strong>, <strong>Packet Loss (%)</strong> (turns red if &gt;5%), <strong>Est. Bandwidth (kbps)</strong>, and the <strong>Active Video Stream</strong> tier currently transmitting.
     </div>
   </div>
 </div>
 
-<div class="callout callout-info avoid-break">
-  <strong>📌 Privacy &amp; Local Execution Guarantee:</strong> All Studio video processing and telemetry analytics execute 100% locally on your machine's hardware using Chromium's internal canvas pipeline. No video streams, camera frames, or private meeting data are ever transmitted to external AI servers.
-</div>
-
-<!-- SECTION 2: INSTALLATION & GETTING STARTED -->
-<h1><span>2.</span> Step-by-Step Installation &amp; Setup</h1>
-
-<h2>🐧 Linux Installation Options</h2>
-
-<div class="step-box avoid-break">
-  <div class="step-title"><span class="step-badge">A</span> Universal AppImage (Recommended — Works on Any Linux Distro)</div>
-  <p>The AppImage requires zero installation and no root/sudo privileges:</p>
-  <pre># 1. Download teamux-v1.0.0-linux-x86_64.AppImage from GitHub Releases
-# 2. Open terminal and mark the file executable:
-chmod +x teamux-v1.0.0-linux-x86_64.AppImage
-
-# 3. Launch Teamux:
-./teamux-v1.0.0-linux-x86_64.AppImage</pre>
-  <p style="font-size:8.5pt; color:#64748b; margin-top:4px;">
-    <em>Tip:</em> To launch Teamux from your application launcher, place the file in <code>~/.local/share/teamux/teamux.AppImage</code>. A desktop entry will automatically be created.
-  </p>
-</div>
-
-<div class="step-box avoid-break">
-  <div class="step-title"><span class="step-badge">B</span> Ubuntu / Debian / Linux Mint / Pop!_OS (.deb Package)</div>
-  <pre># Install using dpkg or apt:
-sudo dpkg -i teamux-v1.0.0-linux-amd64.deb
-# Or resolve any missing system dependencies automatically:
-sudo apt install ./teamux-v1.0.0-linux-amd64.deb</pre>
-</div>
-
-<div class="step-box avoid-break">
-  <div class="step-title"><span class="step-badge">C</span> Portable Tarball (.tar.gz)</div>
-  <pre>tar -xvf teamux-v1.0.0-linux-x64.tar.gz
-cd teamux-1.0.0
-./teamux</pre>
-</div>
-
-<h2>🪟 Windows Installation Options</h2>
-
-<div class="step-box avoid-break">
-  <div class="step-title"><span class="step-badge">1</span> Portable Single-File Executable (.exe)</div>
-  <p>
-    Download <code>teamux-v1.0.0-windows-portable-x64.exe</code> from GitHub Releases. Double-click to launch immediately. No installer, no administrator privileges required. You can run it directly from your Downloads folder, Desktop, or a USB flash drive.
-  </p>
-</div>
-
-<div class="step-box avoid-break">
-  <div class="step-title"><span class="step-badge">2</span> Standalone Zip Archive (.zip)</div>
-  <p>
-    Download <code>teamux-v1.0.0-windows-x64.zip</code>, extract the folder to your preferred directory (e.g. <code>C:\Apps\Teamux</code>), and double-click <code>Teamux.exe</code>.
-  </p>
-</div>
-
-<div class="page-break"></div>
-
-<!-- SECTION 3: SIGNING IN & BASIC NAVIGATION -->
-<h1><span>3.</span> Signing In &amp; Core Navigation</h1>
-
-<div class="step-box avoid-break">
-  <div class="step-title"><span class="step-badge">1</span> Choosing Your Teams Environment</div>
-  <p>
-    Teamux supports both enterprise and personal Microsoft accounts:
-  </p>
-  <ul>
-    <li><strong>Work / School (New Teams v2):</strong> Uses <code>teams.cloud.microsoft</code>. Supports enterprise M365 accounts, channels, calendar, breakout rooms, and tenant switching.</li>
-    <li><strong>Personal (Teams Live):</strong> Uses <code>teams.live.com</code>. Supports personal Microsoft accounts (Outlook.com, Hotmail, Xbox).</li>
-  </ul>
-  <p>
-    <em>To switch:</em> Open Preferences (<code>Ctrl + ,</code>) and select your desired environment from the dropdown.
-  </p>
-</div>
-
-<div class="step-box avoid-break">
-  <div class="step-title"><span class="step-badge">2</span> Authentication &amp; Multi-Factor Authentication (MFA)</div>
-  <p>
-    Enter your corporate email and password. Teamux natively supports Microsoft Authenticator, FIDO2 hardware security keys, SMS codes, and Single Sign-On (SSO) redirects without session drops.
-  </p>
-</div>
-
-<div class="step-box avoid-break">
-  <div class="step-title"><span class="step-badge">3</span> System Tray &amp; Unread Badges</div>
-  <p>
-    When Teamux is running, an icon appears in your System Tray:
-  </p>
-  <ul>
-    <li><strong>Unread Count Badge:</strong> Shows real-time badge count (e.g. <code>(3)</code>) directly on the tray icon and taskbar dock.</li>
-    <li><strong>Tray Context Menu:</strong> Right-click the tray icon to access quick actions:
-      <ul>
-        <li><code>Show Teamux</code> / <code>Hide Teamux</code>: Toggle main window visibility.</li>
-        <li><code>Unread Messages: X</code>: View current unread count.</li>
-        <li><code>Reload Teams</code>: Refresh the interface if web contents stall.</li>
-        <li><code>Preferences</code>: Open settings window.</li>
-        <li><code>Quit Teamux</code>: Safely exit all processes.</li>
-      </ul>
-    </li>
-  </ul>
-</div>
-
-<div class="step-box avoid-break">
-  <div class="step-title"><span class="step-badge">4</span> Guaranteed Clean Exit (Double-Close Escape Hatch)</div>
-  <p>
-    To ensure Teamux never hangs or traps you in an invisible background loop:
-  </p>
-  <ul>
-    <li><strong>Single Click Close:</strong> Minimizes or closes the window according to your preferences.</li>
-    <li><strong>⚡ Double-Close Escape Hatch:</strong> If you press the window close button (<code>X</code>) <strong>twice within 2.5 seconds</strong>, Teamux immediately bypasses all background tray loops and terminates instantly.</li>
-    <li><strong>1.5-Second Fail-Safe Timer:</strong> A built-in kernel shutdown hook guarantees that all child GPU and WebRTC processes are cleanly terminated within 1500ms of exit.</li>
-  </ul>
-</div>
-
-<!-- SECTION 4: ADAPTIVE NETWORK GUARDIAN -->
-<h1><span>4.</span> Adaptive Network Guardian (Low-Bandwidth Optimizer)</h1>
-
-<p>
-  Branch offices, remote sites, cellular hotspots, and satellite links often suffer from network latency spikes, packet loss, or constrained uplink capacity. Under standard Teams, video upload monopolizes the uplink, resulting in garbled audio, video freeze, or dropped calls. The <strong>Adaptive Network Guardian</strong> eliminates this problem.
-</p>
-
-<h2>How the Guardian Protects Your Call</h2>
-<p>
-  Teamux hooks into the WebRTC peer connection statistics engine, evaluating network metrics every 2.5 seconds:
-</p>
-
+<h2>Auto Mode: The 4 Dynamic Quality Tiers &amp; Audio-First Recovery</h2>
 <table class="avoid-break">
   <thead>
     <tr>
       <th>Quality Tier</th>
-      <th>Resolution &amp; Framerate</th>
+      <th>Resolution &amp; FPS</th>
       <th>Upload Bitrate</th>
       <th>Network Triggers</th>
       <th>Guardian Action</th>
@@ -490,210 +683,185 @@ cd teamux-1.0.0
     <tr>
       <td><span class="badge badge-720p">720p Full HD</span></td>
       <td>1280 &times; 720 @ 30 FPS</td>
-      <td>~2,000 kbps (2.0 Mbps)</td>
+      <td>~2,000 kbps</td>
       <td>Ping &lt; 130 ms, Loss &lt; 2%</td>
       <td>Optimal network: full high-definition video output.</td>
     </tr>
     <tr>
       <td><span class="badge badge-480p">480p Balanced</span></td>
       <td>854 &times; 480 @ 20 FPS</td>
-      <td>~500 kbps (0.5 Mbps)</td>
+      <td>~500 kbps</td>
       <td>Ping 130–260 ms, Loss 2–6%</td>
       <td>Cuts upload bandwidth by 75% while keeping video sharp.</td>
     </tr>
     <tr>
       <td><span class="badge badge-360p">360p Eco Saver</span></td>
       <td>640 &times; 360 @ 15 FPS</td>
-      <td>~250 kbps (0.25 Mbps)</td>
+      <td>~250 kbps</td>
       <td>Ping 260–500 ms, Loss 6–15%</td>
       <td>Deep 87% bandwidth savings for congested office links.</td>
     </tr>
     <tr>
       <td><span class="badge badge-audio">Audio-First Priority</span></td>
       <td>Static Slate @ 1 FPS</td>
-      <td>~0 kbps (Video paused)</td>
+      <td>~0 kbps (Paused)</td>
       <td>Ping &gt; 500 ms, Loss &gt; 15%</td>
-      <td><strong>Voice Protection:</strong> Pauses video upload so call voice audio is 100% clear. Auto-recovers when bandwidth returns.</td>
+      <td><strong>Voice Protection:</strong> Pauses video so voice is 100% clear. Auto-recovers after 3 healthy checks (~7.5s).</td>
     </tr>
   </tbody>
 </table>
-
-<div class="page-break"></div>
-
-<h2>Step-by-Step: Using the Network Guardian During a Meeting</h2>
-
-<div class="step-box avoid-break">
-  <div class="step-title"><span class="step-badge">1</span> Open Teamux Studio in Any Call</div>
-  <p>
-    When you join a meeting or test your camera, look at the bottom-right corner of the Teams window. You will see the floating <strong>✨ Studio</strong> pill displaying your active video tier (e.g. <code>✨ Studio [720p]</code>). Click the pill to open the controller.
-  </p>
-</div>
-
-<div class="step-box avoid-break">
-  <div class="step-title"><span class="step-badge">2</span> Switch to the 🌐 Network Tab</div>
-  <p>
-    Click the fourth tab labeled <strong>🌐 Network</strong>. You will see:
-  </p>
-  <ul>
-    <li><strong>Adaptive Guardian Toggle:</strong> Turn the auto-guardian on or off. (Default: On).</li>
-    <li><strong>Bandwidth Profile Dropdown:</strong> Select <code>Auto (Dynamic Guardian)</code>, or manually lock your stream to <code>720p</code>, <code>480p</code>, <code>360p</code>, or <code>Audio-First Priority</code>.</li>
-    <li><strong>Live WebRTC Telemetry Card:</strong>
-      <ul>
-        <li><code>Latency (RTT)</code>: Displays current round-trip network ping in milliseconds.</li>
-        <li><code>Packet Loss</code>: Shows real-time packet loss percentage (turns red if &gt; 5%).</li>
-        <li><code>Est. Bandwidth</code>: Live available outgoing bitrate calculated by WebRTC.</li>
-        <li><code>Active Video Stream</code>: Shows the resolution currently transmitting to attendees.</li>
-      </ul>
-    </li>
-  </ul>
-</div>
-
-<div class="step-box avoid-break">
-  <div class="step-title"><span class="step-badge">3</span> How Audio-First Mode Works Automatically</div>
-  <p>
-    If someone at your branch office starts a large file transfer and your ping surges past 500ms:
-  </p>
-  <ol>
-    <li>The Guardian instantly engages <strong>Audio-First Mode</strong>.</li>
-    <li>Your video upload is paused, cutting outgoing video bandwidth to zero.</li>
-    <li>Meeting participants see a clean dark slate: <em>"🔴 Audio-First Mode Active: Video upload paused to protect voice audio quality. Resuming automatically when network clears."</em></li>
-    <li>Your call voice audio remains <strong>100% crisp and uninterrupted</strong> without robotic distortion.</li>
-    <li>The top meeting recovery banner updates to red: <code>🔴 Audio-First Protection Active (Low Bandwidth)</code>.</li>
-    <li>When network latency drops back to normal for 3 consecutive samples (~7.5s), Teamux automatically restores your video feed.</li>
-  </ol>
-</div>
-
-<div class="callout callout-warning avoid-break">
-  <strong>💡 Tip for Low-Bandwidth Branch Offices:</strong> If your office internet is permanently slow (&lt; 1 Mbps uplink), you can set your Bandwidth Profile to <code>360p Eco Saver</code> permanently in <strong>Preferences &gt; Network Guardian</strong>. This ensures you never saturate the branch uplink during all-hands video calls.
-</div>
-
-<!-- SECTION 5: IN-MEETING STUDIO CONTROLLER -->
-<h1><span>5.</span> In-Meeting Studio Camera Controller</h1>
-
-<p>
-  The Teamux Studio widget lets you enhance your appearance, fix dim webcam hardware, and grade your video feed in real time without third-party virtual camera software.
-</p>
 
 <div class="grid-2 avoid-break">
-  <div class="card">
-    <div class="card-title">✨ Retouch Tab</div>
-    <div class="card-body">
-      <ul>
-        <li><strong>Beauty Filter:</strong> Bilateral skin tone smoothing that reduces camera noise and blemishes while preserving facial sharpness. Slider adjustable from 10% to 100%.</li>
-        <li><strong>Studio Lighting:</strong> Intelligent shadow illumination that brightens your face in dim offices or backlit windows.</li>
-        <li><strong>Portrait Vignette Focus:</strong> Soft radial edge contrast drawing visual focus directly to you.</li>
-      </ul>
+  <div>
+    <div style="font-weight:700; font-size:8.5pt; color:#b91c1c; margin-bottom:4px;">What Attendees See in Audio-First Mode:</div>
+    <div class="audio-slate">
+      <div style="color:#ef4444; font-weight:800; font-size:10.5pt; margin-bottom:3px;">🔴 Audio-First Mode Active</div>
+      <div style="color:#94a3b8; font-size:8pt;">Video upload paused to protect voice audio quality.</div>
+      <div style="color:#94a3b8; font-size:8pt;">Resuming automatically when network clears.</div>
     </div>
   </div>
-  <div class="card">
-    <div class="card-title">🎨 Tone &amp; Color Tab</div>
-    <div class="card-body">
-      <ul>
-        <li><strong>Grayscale Toggle:</strong> High-definition black and white stream for professional interviews or low-light situations.</li>
-        <li><strong>Contrast Slider (50% to 150%):</strong> Adjust tonal separation.</li>
-        <li><strong>Saturation Slider (0% to 200%):</strong> Enrich washed-out colors.</li>
-        <li><strong>Shadow Lift (-50 to +50):</strong> Recover details lost in dark shadows.</li>
-        <li><strong>Warm Ambience (0% to 100%):</strong> Add a warm golden tint.</li>
-      </ul>
+  <div class="settings-mock">
+    <div style="font-weight:700; color:#c7d2fe; font-size:8.5pt; margin-bottom:5px;">Manual Mode in Preferences (<code>Ctrl + ,</code>) &rarr; Save &amp; Apply:</div>
+    <div class="settings-sec">
+      <div class="chk-row"><span class="chk-box">&#10003;</span><span>Adaptive Network Guardian (Auto-Throttle video)</span></div>
+      <div style="color:#a1a1aa; font-size:7.8pt; margin:4px 0 2px 0;">Default Video Bandwidth Mode:</div>
+      <div class="net-select" style="background:#18181b;"><span>Eco Bandwidth Saver (360p @ 15 FPS / ~250 kbps)</span><span>&#9662;</span></div>
     </div>
   </div>
 </div>
 
-<div class="step-box avoid-break">
-  <div class="step-title">👁️ Hold-to-Compare Feature</div>
-  <p>
-    At the bottom of the Studio card, click and hold the <strong>👁️ Hold to Compare</strong> button. While held, your video preview instantly switches to the raw, unprocessed camera feed. Release the button to return to your enhanced stream. This makes calibrating your beauty and tone settings effortless.
-  </p>
+<!-- SECTION 5: CAMERA STUDIO (RETOUCH & TONE) -->
+<h1><span>5.</span> In-Meeting Studio Camera Controller (✨ Retouch &amp; 🎨 Tone)</h1>
+<p>Click the floating <strong>✨ Studio</strong> pill during any call or camera preview to enhance your video locally (all processing stays on your PC—nothing is sent to external servers).</p>
+
+<!-- Retouch Tab Visual -->
+<div class="ui-split avoid-break">
+  <div class="studio-card">
+    <div class="studio-header">
+      <div class="studio-title">✨ Teamux Studio</div>
+      <div class="studio-min"><span class="pin">5</span> &minus;</div>
+    </div>
+    <div class="studio-tabs">
+      <div class="studio-tab active">✨ Retouch</div>
+      <div class="studio-tab">🎨 Tone</div>
+      <div class="studio-tab">🎭 Themes</div>
+      <div class="studio-tab">🌐 Network</div>
+    </div>
+    <div class="studio-body">
+      <div class="t-row"><div class="t-label"><span class="pin">1</span><span>Beauty Filter</span></div><div class="sw on"></div></div>
+      <div class="rng-group">
+        <div class="rng-lbl"><span>Smoothness</span><span>55%</span></div>
+        <div class="rng-track"><div class="rng-fill" style="width:55%;"><div class="rng-thumb"></div></div></div>
+      </div>
+      <div class="t-row"><div class="t-label"><span class="pin">2</span><span>Studio Lighting</span></div><div class="sw on"></div></div>
+      <div class="t-row"><div class="t-label"><span class="pin">3</span><span>Portrait Focus (Vignette)</span></div><div class="sw on"></div></div>
+      <div class="hint-box-dark">💡 Custom BG &amp; Blur: Supported natively in Teams meeting under More &gt; Video effects.</div>
+      <div class="btn-compare"><span class="pin">4</span><span>👁️ Hold to Compare</span></div>
+    </div>
+  </div>
+
+  <div class="explain-stack">
+    <div class="explain-item"><span class="pin-inline">1</span><strong>Beauty Filter &amp; Smoothness (10%–100%):</strong> Softly smooths skin tone and reduces webcam grain. Slide right for stronger smoothing.</div>
+    <div class="explain-item"><span class="pin-inline">2</span><strong>Studio Lighting:</strong> Brightens dark shadows on your face automatically in dim offices.</div>
+    <div class="explain-item"><span class="pin-inline">3</span><strong>Portrait Focus (Vignette):</strong> Softly darkens outer frame edges so focus stays centered on you.</div>
+    <div class="explain-item"><span class="pin-inline">4</span><strong>👁️ Hold to Compare:</strong> Hold down to preview your raw unedited camera; release to snap back to your Studio look.</div>
+    <div class="explain-item"><span class="pin-inline">5</span><strong>Minimize (&minus;):</strong> Collapses back to the small <code>✨ Studio</code> pill while keeping all effects active.</div>
+  </div>
 </div>
 
-<div class="page-break"></div>
+<div class="cam-compare avoid-break">
+  <div class="cam-frame cam-raw">
+    <div class="cam-face" style="background:#475569;">😐</div>
+    <div style="text-align:left;"><div style="font-weight:700; font-size:8.5pt;">BEFORE: Raw Webcam</div><div style="font-size:7.8pt; color:#94a3b8;">Dark shadows, flat lighting, visible grain</div></div>
+  </div>
+  <div class="cam-frame cam-studio">
+    <div class="cam-face" style="background:#6366f1;">😊</div>
+    <div style="text-align:left;"><div style="font-weight:700; font-size:8.5pt; color:#a5b4fc;">AFTER: Studio Retouch + Lighting + Vignette</div><div style="font-size:7.8pt; color:#e0e7ff;">Brighter face, smooth skin, focused edges</div></div>
+  </div>
+</div>
+
+<!-- Tone Tab Visual -->
+<div class="ui-split avoid-break" style="margin-top:8px;">
+  <div class="studio-card">
+    <div class="studio-header">
+      <div class="studio-title">✨ Teamux Studio</div>
+      <div class="studio-min">&minus;</div>
+    </div>
+    <div class="studio-tabs">
+      <div class="studio-tab">✨ Retouch</div>
+      <div class="studio-tab active">🎨 Tone</div>
+      <div class="studio-tab">🎭 Themes</div>
+      <div class="studio-tab">🌐 Network</div>
+    </div>
+    <div class="studio-body">
+      <div class="t-row"><div class="t-label"><span class="pin">1</span><span>Grayscale (Black &amp; White)</span></div><div class="sw"></div></div>
+      <div class="rng-group"><div class="rng-lbl"><span><span class="pin-inline">2</span>Contrast</span><span>110%</span></div><div class="rng-track"><div class="rng-fill" style="width:60%;"><div class="rng-thumb"></div></div></div></div>
+      <div class="rng-group"><div class="rng-lbl"><span><span class="pin-inline">3</span>Saturation</span><span>115%</span></div><div class="rng-track"><div class="rng-fill" style="width:58%;"><div class="rng-thumb"></div></div></div></div>
+      <div class="rng-group"><div class="rng-lbl"><span><span class="pin-inline">4</span>Shadow Lift</span><span>+15</span></div><div class="rng-track"><div class="rng-fill" style="width:65%;"><div class="rng-thumb"></div></div></div></div>
+      <div class="rng-group"><div class="rng-lbl"><span><span class="pin-inline">5</span>Ambience (Warm Glow)</span><span>25%</span></div><div class="rng-track"><div class="rng-fill" style="width:25%;"><div class="rng-thumb"></div></div></div></div>
+      <div class="btn-reset"><span class="pin">6</span><span>↺ Reset Tone Adjustments</span></div>
+    </div>
+  </div>
+
+  <div class="explain-stack">
+    <div class="explain-item"><span class="pin-inline">1</span><strong>Grayscale (Black &amp; White):</strong> One-click crisp monochrome stream.</div>
+    <div class="explain-item"><span class="pin-inline">2</span><strong>Contrast (50%–150%):</strong> Deepens blacks and removes hazy webcam look.</div>
+    <div class="explain-item"><span class="pin-inline">3</span><strong>Saturation (0%–200%):</strong> Enriches washed-out webcam colors.</div>
+    <div class="explain-item"><span class="pin-inline">4</span><strong>Shadow Lift (-50 to +50):</strong> Brightens your face when sitting in front of a bright window.</div>
+    <div class="explain-item"><span class="pin-inline">5</span><strong>Ambience / Warm Glow (0%–100%):</strong> Adds a warm tint to balance cold office fluorescent lights.</div>
+    <div class="explain-item"><span class="pin-inline">6</span><strong>↺ Reset Tone Adjustments:</strong> Resets all tone controls back to neutral defaults.</div>
+  </div>
+</div>
 
 <!-- SECTION 6: CUSTOM THEMES ENGINE -->
-<h1><span>6.</span> Custom Themes Engine</h1>
+<h1 style="page-break-after: avoid;"><span>6.</span> Custom App Themes Engine (🎭 Themes Tab)</h1>
+<p style="page-break-after: avoid;">Click <strong>✨ Studio</strong> &rarr; <strong>🎭 Themes</strong> and click any theme card to restyle Microsoft Teams immediately—no restart required. Your selection is saved automatically.</p>
 
-<p>
-  Teamux includes a real-time CSS theme injection engine that customizes the entire Microsoft Teams interface (chats, channels, navigation bar, and settings):
-</p>
+<div class="ui-split avoid-break">
+  <div class="studio-card">
+    <div class="studio-header">
+      <div class="studio-title">✨ Teamux Studio</div>
+      <div class="studio-min">&minus;</div>
+    </div>
+    <div class="studio-tabs">
+      <div class="studio-tab">✨ Retouch</div>
+      <div class="studio-tab">🎨 Tone</div>
+      <div class="studio-tab active">🎭 Themes</div>
+      <div class="studio-tab">🌐 Network</div>
+    </div>
+    <div class="studio-body" style="gap:5px;">
+      <div class="theme-card"><div><div class="theme-title">🖥️ Teams Default</div><div class="theme-desc">Microsoft Teams native appearance</div></div><div class="swatches"><span class="dot" style="background:#201f1f"></span><span class="dot" style="background:#2d2c2c"></span><span class="dot" style="background:#6264a7"></span></div></div>
+      <div class="theme-card active"><div><div class="theme-title">🌌 OLED Midnight <span class="theme-badge">Active</span></div><div class="theme-desc">True pitch black with neon electric blue</div></div><div class="swatches"><span class="dot" style="background:#000000"></span><span class="dot" style="background:#121212"></span><span class="dot" style="background:#38bdf8"></span></div></div>
+      <div class="theme-card"><div><div class="theme-title">☕ Catppuccin Mocha</div><div class="theme-desc">Soothing developer pastel &amp; mauve</div></div><div class="swatches"><span class="dot" style="background:#1e1e2e"></span><span class="dot" style="background:#313244"></span><span class="dot" style="background:#cba6f7"></span></div></div>
+      <div class="theme-card"><div><div class="theme-title">❄️ Nord Frost</div><div class="theme-desc">Arctic slates &amp; crisp polar cyan</div></div><div class="swatches"><span class="dot" style="background:#2e3440"></span><span class="dot" style="background:#3b4252"></span><span class="dot" style="background:#88c0d0"></span></div></div>
+      <div class="theme-card"><div><div class="theme-title">🌆 Tokyo Night</div><div class="theme-desc">Deep navy twilight &amp; neon cyan/magenta</div></div><div class="swatches"><span class="dot" style="background:#1a1b26"></span><span class="dot" style="background:#24283b"></span><span class="dot" style="background:#7dcfff"></span></div></div>
+      <div class="theme-card"><div><div class="theme-title">🧛 Dracula</div><div class="theme-desc">Vampire dark slate &amp; vibrant neon pink</div></div><div class="swatches"><span class="dot" style="background:#282a36"></span><span class="dot" style="background:#44475a"></span><span class="dot" style="background:#ff79c6"></span></div></div>
+      <div class="theme-card"><div><div class="theme-title">🌸 Rosé Pine</div><div class="theme-desc">Cozy warm dusk &amp; delicate rose gold</div></div><div class="swatches"><span class="dot" style="background:#191724"></span><span class="dot" style="background:#26233a"></span><span class="dot" style="background:#ebbcba"></span></div></div>
+    </div>
+  </div>
 
-<table class="avoid-break">
-  <thead>
-    <tr>
-      <th>Theme</th>
-      <th>Primary Background</th>
-      <th>Accent Color</th>
-      <th>Best For</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><strong>🖤 OLED Pure Black</strong></td>
-      <td><code>#000000</code></td>
-      <td><code>#6366f1</code> (Indigo)</td>
-      <td>OLED laptops, dark rooms, maximum battery savings.</td>
-    </tr>
-    <tr>
-      <td><strong>☕ Catppuccin Mocha</strong></td>
-      <td><code>#1e1e2e</code></td>
-      <td><code>#cba6f7</code> (Lavender)</td>
-      <td>Warm, soothing pastel palette; reduces eye fatigue.</td>
-    </tr>
-    <tr>
-      <td><strong>❄️ Nord Frost</strong></td>
-      <td><code>#2e3440</code></td>
-      <td><code>#88c0d0</code> (Glacial Blue)</td>
-      <td>Clean Nordic aesthetic with calm slate contrasts.</td>
-    </tr>
-    <tr>
-      <td><strong>🌃 Tokyo Night</strong></td>
-      <td><code>#1a1b26</code></td>
-      <td><code>#7aa2f7</code> (Neon Blue)</td>
-      <td>Cyberpunk-inspired deep indigo with vibrant highlights.</td>
-    </tr>
-    <tr>
-      <td><strong>🧛 Dracula</strong></td>
-      <td><code>#282a36</code></td>
-      <td><code>#bd93f9</code> (Purple)</td>
-      <td>High-contrast, beloved developer dark theme.</td>
-    </tr>
-    <tr>
-      <td><strong>🌸 Rosé Pine</strong></td>
-      <td><code>#191724</code></td>
-      <td><code>#eb6f92</code> (Rose)</td>
-      <td>Minimalist, muted natural pine, rose, and gold tones.</td>
-    </tr>
-  </tbody>
-</table>
-
-<div class="step-box avoid-break">
-  <div class="step-title"><span class="step-badge">→</span> How to Change Your App Theme</div>
-  <p>
-    Open the Studio widget during any call or camera preview, click the <strong>🎭 Themes</strong> tab, and click any theme card. The theme is applied instantly across all windows and persisted across app restarts.
-  </p>
+  <div>
+    <div class="explain-item" style="margin-bottom:6px;">
+      <strong>Visual Preview Gallery:</strong> See how the Teams sidebar, chat area, and buttons look in each custom theme:
+    </div>
+    <div class="theme-gallery">
+      <div class="mini-app" style="border-color:#262626;"><div class="mini-app-bar" style="background:#080808; color:#fff;"><span>🌌 OLED</span><span style="color:#38bdf8;">●</span></div><div class="mini-app-body"><div class="mini-side" style="background:#080808; color:#a3a3a3;"># General</div><div class="mini-main" style="background:#000; color:#fff;"><span>Chat</span><span class="mini-btn" style="background:#38bdf8; color:#000;">Join</span></div></div></div>
+      <div class="mini-app" style="border-color:#313244;"><div class="mini-app-bar" style="background:#181825; color:#cdd6f4;"><span>☕ Mocha</span><span style="color:#cba6f7;">●</span></div><div class="mini-app-body"><div class="mini-side" style="background:#181825; color:#a6adc8;"># General</div><div class="mini-main" style="background:#1e1e2e; color:#cdd6f4;"><span>Chat</span><span class="mini-btn" style="background:#cba6f7; color:#111;">Join</span></div></div></div>
+      <div class="mini-app" style="border-color:#434c5e;"><div class="mini-app-bar" style="background:#242933; color:#eceff4;"><span>❄️ Nord</span><span style="color:#88c0d0;">●</span></div><div class="mini-app-body"><div class="mini-side" style="background:#242933; color:#d8dee9;"># General</div><div class="mini-main" style="background:#2e3440; color:#eceff4;"><span>Chat</span><span class="mini-btn" style="background:#88c0d0; color:#111;">Join</span></div></div></div>
+      <div class="mini-app" style="border-color:#292e42;"><div class="mini-app-bar" style="background:#16161e; color:#c0caf5;"><span>🌆 Tokyo</span><span style="color:#7dcfff;">●</span></div><div class="mini-app-body"><div class="mini-side" style="background:#16161e; color:#787c99;"># General</div><div class="mini-main" style="background:#1a1b26; color:#c0caf5;"><span>Chat</span><span class="mini-btn" style="background:#7dcfff; color:#111;">Join</span></div></div></div>
+      <div class="mini-app" style="border-color:#44475a;"><div class="mini-app-bar" style="background:#1e1f29; color:#f8f8f2;"><span>🧛 Dracula</span><span style="color:#ff79c6;">●</span></div><div class="mini-app-body"><div class="mini-side" style="background:#1e1f29; color:#d6d6d4;"># General</div><div class="mini-main" style="background:#282a36; color:#f8f8f2;"><span>Chat</span><span class="mini-btn" style="background:#ff79c6; color:#111;">Join</span></div></div></div>
+      <div class="mini-app" style="border-color:#403d52;"><div class="mini-app-bar" style="background:#14121e; color:#e0def4;"><span>🌸 Rosé</span><span style="color:#ebbcba;">●</span></div><div class="mini-app-body"><div class="mini-side" style="background:#14121e; color:#908caa;"># General</div><div class="mini-main" style="background:#191724; color:#e0def4;"><span>Chat</span><span class="mini-btn" style="background:#ebbcba; color:#111;">Join</span></div></div></div>
+    </div>
+    <div class="callout callout-info" style="margin-top:6px;">
+      <strong>Battery &amp; Comfort Tip:</strong> Use <strong>🌌 OLED Midnight</strong> on OLED laptops for maximum battery life, or <strong>☕ Catppuccin Mocha / 🌸 Rosé Pine</strong> to reduce eye fatigue.
+    </div>
+  </div>
 </div>
 
-<!-- SECTION 7: SCREEN & WINDOW SHARING -->
-<h1><span>7.</span> Screen &amp; Window Sharing Guide</h1>
-
-<h2>Linux (Wayland &amp; PipeWire)</h2>
+<!-- SECTION 7: SCREEN SHARING & PREFERENCES -->
+<h1><span>7.</span> Screen Sharing &amp; Preferences Reference (<code>Ctrl + ,</code>)</h1>
 <p>
-  On modern Linux desktops running Wayland (GNOME, KDE Plasma, Sway), Teamux communicates with the system desktop portal (<code>xdg-desktop-portal</code>) via PipeWire:
-</p>
-<ol>
-  <li>In a Teams meeting, click the <strong>Share</strong> button.</li>
-  <li>Teamux opens the native desktop portal picker showing live thumbnails of all active monitors and individual application windows.</li>
-  <li>Select your display or window and click <strong>Share</strong>.</li>
-  <li>Hardware-accelerated PipeWire streaming delivers 30 FPS screen sharing without black screens or cursor flicker.</li>
-</ol>
-
-<h2>Windows 10 &amp; 11</h2>
-<p>
-  Click <strong>Share</strong>, then select either an entire display or an individual application window. Hardware acceleration ensures smooth video playback and high-DPI font sharpness.
-</p>
-
-<!-- SECTION 8: PREFERENCES REFERENCE -->
-<h1><span>8.</span> Settings &amp; Preferences Reference</h1>
-<p>
-  Open Preferences anytime by pressing <code>Ctrl + ,</code> or via <strong>File &gt; Preferences</strong>:
+  <strong>Linux Wayland &amp; PipeWire:</strong> Click <strong>Share</strong> in a meeting to open the native portal picker showing live thumbnails of monitors and windows at 30 FPS. <strong>Windows 10 &amp; 11:</strong> Click <strong>Share</strong> and select any monitor or application window.
 </p>
 
 <table class="avoid-break">
@@ -706,102 +874,38 @@ cd teamux-1.0.0
     </tr>
   </thead>
   <tbody>
-    <tr>
-      <td><strong>Adaptive Guardian</strong></td>
-      <td>Auto-throttle video bitrate based on network congestion</td>
-      <td><code>true</code> (Enabled)</td>
-      <td>Keep enabled for all remote &amp; branch offices.</td>
-    </tr>
-    <tr>
-      <td><strong>Bandwidth Profile</strong></td>
-      <td>Target video upload preset (Auto, 720p, 480p, 360p, Audio)</td>
-      <td><code>Auto (Adaptive)</code></td>
-      <td>Select <code>360p</code> for very slow links (&lt; 1 Mbps).</td>
-    </tr>
-    <tr>
-      <td><strong>Teams Environment</strong></td>
-      <td>Switch between Work/School v2 and Personal</td>
-      <td><code>Work/School v2</code></td>
-      <td>Set to <code>Work/School v2</code> for enterprise accounts.</td>
-    </tr>
-    <tr>
-      <td><strong>Keep running in tray</strong></td>
-      <td>Keep running in background when window is closed</td>
-      <td><code>false</code> (Disabled)</td>
-      <td>Leave disabled to ensure immediate clean exit.</td>
-    </tr>
-    <tr>
-      <td><strong>Minimize to tray</strong></td>
-      <td>Minimize window directly to system tray</td>
-      <td><code>true</code> (Enabled)</td>
-      <td>Useful for receiving background call notifications.</td>
-    </tr>
-    <tr>
-      <td><strong>Hardware Acceleration</strong></td>
-      <td>GPU rasterization and VA-API hardware decode</td>
-      <td><code>true</code> (Enabled)</td>
-      <td>Keep enabled for minimum CPU utilization.</td>
-    </tr>
-    <tr>
-      <td><strong>Unread Badges</strong></td>
-      <td>Display badge counter on tray and dock</td>
-      <td><code>true</code> (Enabled)</td>
-      <td>Provides instant visibility of missed messages.</td>
-    </tr>
+    <tr><td><strong>Adaptive Guardian</strong></td><td>Auto-throttle video bitrate when network slows</td><td><code>true</code></td><td>Keep enabled for all remote &amp; branch offices.</td></tr>
+    <tr><td><strong>Bandwidth Profile</strong></td><td>Auto, 720p, 480p, 360p Eco, or Audio-Only</td><td><code>Auto</code></td><td>Lock <code>360p</code> for permanently slow links (&lt;1 Mbps).</td></tr>
+    <tr><td><strong>Teams Environment</strong></td><td>Work/School v2 vs. Personal (Teams Live)</td><td><code>Work/School v2</code></td><td>Keep <code>Work/School v2</code> for company accounts.</td></tr>
+    <tr><td><strong>Keep running in tray</strong></td><td>Keep running in background on window close</td><td><code>false</code></td><td>Leave disabled for immediate clean exit.</td></tr>
+    <tr><td><strong>Minimize to tray</strong></td><td>Minimize window directly to system tray</td><td><code>true</code></td><td>Useful for background call &amp; chat notifications.</td></tr>
+    <tr><td><strong>Hardware Acceleration</strong></td><td>GPU rasterization &amp; VA-API video decode</td><td><code>true</code></td><td>Keep enabled for low CPU usage.</td></tr>
   </tbody>
 </table>
 
-<div class="page-break"></div>
-
-<!-- SECTION 9: TROUBLESHOOTING & FAQ -->
-<h1><span>9.</span> Troubleshooting &amp; FAQs</h1>
-
-<div class="step-box avoid-break">
-  <div class="step-title">Q: My camera shows a black screen or fails to initialize.</div>
-  <p>
-    <strong>Linux:</strong> Verify your user belongs to the <code>video</code> group: <code>sudo usermod -a -G video $USER</code>, then log out and back in. Check if another application (e.g. OBS or Zoom) is holding an exclusive lock on <code>/dev/video0</code>.<br>
-    <strong>Windows:</strong> Go to <em>Windows Settings &gt; Privacy &amp; Security &gt; Camera</em> and ensure "Allow desktop apps to access your camera" is toggled ON.
-  </p>
+<!-- SECTION 8: TROUBLESHOOTING -->
+<h1><span>8.</span> Troubleshooting &amp; FAQs</h1>
+<div class="grid-2 avoid-break">
+  <div class="step-box" style="margin-bottom:0;">
+    <div class="step-title">Q: Camera shows black screen?</div>
+    <p><strong>Windows:</strong> Settings &rarr; Privacy &amp; Security &rarr; Camera &rarr; Allow desktop apps.<br><strong>Linux:</strong> Run <code>sudo usermod -a -G video $USER</code> and ensure OBS/Zoom isn't locking <code>/dev/video0</code>.</p>
+  </div>
+  <div class="step-box" style="margin-bottom:0;">
+    <div class="step-title">Q: Wayland screen share black screen?</div>
+    <p>Verify PipeWire &amp; portal: <code>systemctl --user status pipewire</code> and install <code>xdg-desktop-portal-gnome</code> (or <code>-kde</code>).</p>
+  </div>
+  <div class="step-box" style="margin-bottom:0;">
+    <div class="step-title">Q: App hangs on close?</div>
+    <p>Click <strong>X twice within 2.5 seconds</strong> (Double-Close Escape Hatch) or right-click Tray &rarr; <strong>Quit Teamux</strong>.</p>
+  </div>
+  <div class="step-box" style="margin-bottom:0;">
+    <div class="step-title">Q: Downloads &amp; Support?</div>
+    <p>Releases: <code>github.com/quietbytehq/teamux/releases</code><br>Email: <code>hello@quietbytehq.uk</code></p>
+  </div>
 </div>
 
-<div class="step-box avoid-break">
-  <div class="step-title">Q: Screen sharing yields a black screen on Linux Wayland.</div>
-  <p>
-    Verify PipeWire and the desktop portal are running:
-  </p>
-  <pre>systemctl --user status pipewire
-# For GNOME on Ubuntu/Debian:
-sudo apt install xdg-desktop-portal xdg-desktop-portal-gnome
-# For KDE:
-sudo apt install xdg-desktop-portal xdg-desktop-portal-kde</pre>
-</div>
-
-<div class="step-box avoid-break">
-  <div class="step-title">Q: The app does not quit or hangs when closing.</div>
-  <p>
-    In Teamux v1.0.0, use the <strong>Double-Close Escape Hatch</strong>: click the window close button (<code>X</code>) twice within 2.5 seconds. Teamux will immediately terminate all processes cleanly. You can also right-click the System Tray icon and select <strong>Quit Teamux</strong>.
-  </p>
-</div>
-
-<div class="step-box avoid-break">
-  <div class="step-title">Q: Does the Studio Beauty Filter work in Microsoft Teams recordings?</div>
-  <p>
-    Yes! Because the Studio enhancements are applied directly to the camera stream inside Chromium before WebRTC transmission, all meeting attendees, call recordings, and live streams receive the enhanced video feed.
-  </p>
-</div>
-
-<div class="step-box avoid-break">
-  <div class="step-title">Q: Where can I report bugs or download new updates?</div>
-  <p>
-    Visit the official GitHub repository: <a href="https://github.com/quietbytehq/teamux">https://github.com/quietbytehq/teamux</a><br>
-    Releases: <a href="https://github.com/quietbytehq/teamux/releases">https://github.com/quietbytehq/teamux/releases</a><br>
-    Email support: <a href="mailto:hello@quietbytehq.uk">hello@quietbytehq.uk</a>
-  </p>
-</div>
-
-<!-- DISCLAIMER -->
 <div class="disclaimer-box avoid-break">
-  <strong>Legal Disclaimer:</strong> Teamux is an independent open-source project and is not affiliated with, endorsed, or sponsored by Microsoft Corporation. Microsoft, Microsoft Teams, and Windows are trademarks of Microsoft Corporation. All code is licensed under the Apache License 2.0. Published by <strong>Quiet Byte</strong>.
+  <strong>Legal Disclaimer:</strong> Teamux is an independent open-source project and is not affiliated with, endorsed, or sponsored by Microsoft Corporation. Microsoft, Microsoft Teams, and Windows are trademarks of Microsoft Corporation. Licensed under Apache-2.0. Published by <strong>Quiet Byte</strong>.
 </div>
 
 </body>
@@ -813,14 +917,13 @@ with open(HTML_OUTPUT, "w", encoding="utf-8") as f:
 
 print(f"HTML guide generated at: {HTML_OUTPUT}")
 
-# Render to PDF using Chromium headless
 cmd = [
     "/snap/bin/chromium",
     "--headless",
     "--no-sandbox",
     "--disable-gpu",
     f"--print-to-pdf={PDF_OUTPUT}",
-    "--print-to-pdf-no-header",
+    "--no-pdf-header-footer",
     HTML_OUTPUT
 ]
 
@@ -831,13 +934,8 @@ if res.returncode != 0:
     sys.exit(1)
 
 print(f"PDF successfully rendered to: {PDF_OUTPUT}")
-
-# Copy to accessible locations
-subprocess.run(["cp", PDF_OUTPUT, USER_PDF_COPY])
+subprocess.run(["cp", PDF_OUTPUT, USER_PDF_COPY], check=True)
 print(f"Copied PDF to: {USER_PDF_COPY}")
-
-# Also copy to Games workspace if available
 if os.path.exists("/home/faisal/Games"):
-    games_copy = "/home/faisal/Games/Teamux_User_Guide_v1.0.0.pdf"
-    subprocess.run(["cp", PDF_OUTPUT, games_copy])
-    print(f"Copied PDF to: {games_copy}")
+    subprocess.run(["cp", PDF_OUTPUT, GAMES_PDF_COPY], check=True)
+    print(f"Copied PDF to: {GAMES_PDF_COPY}")
