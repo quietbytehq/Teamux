@@ -20,7 +20,8 @@
     "dist:win": "electron-builder --win portable zip",
     "dist:deb": "electron-builder --linux deb",
     "dist:appimage": "electron-builder --linux AppImage",
-    "dist:tar": "electron-builder --linux tar.gz"
+    "dist:tar": "electron-builder --linux tar.gz",
+    "dist:snap": "electron-builder --linux snap"
   },
   "keywords": [
     "teams",

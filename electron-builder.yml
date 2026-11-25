@@ -59,3 +59,15 @@ deb:
 
 appImage:
   category: Network
+
+snap:
+  confinement: strict
+  grade: stable
+  summary: Microsoft Teams client with Adaptive Network Guardian & Studio Camera
+  plugs:
+    - default
+    - camera
+    - audio-record
+    - screen-inhibit-control
+    - network-bind
+    - removable-media
