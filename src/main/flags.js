@@ -1,10 +1,11 @@
 // src/main/flags.js
-// Linux, Wayland, PipeWire, GPU Acceleration, and Resource Optimization switches
+// Linux, Wayland, PipeWire, GPU Acceleration, and Low-Hardware Resource Optimization switches
 
 const { app } = require('electron');
 
 function configureAppFlags(store) {
   const hardwareAccel = store.get('hardwareAcceleration', true);
+  const lowHardwareMode = store.get('lowHardwareMode', false);
   const forceWayland = store.get('forceWayland', false);
 
   if (!hardwareAccel) {
@@ -23,22 +24,26 @@ function configureAppFlags(store) {
   }
 
   // -----------------------------------------------------------
-  // Memory & Resource Optimization Switches
+  // Memory & Resource Optimization Switches (Adaptive to Hardware)
   // -----------------------------------------------------------
-  // 1. Adequate V8 heap space so garbage collection doesn't choke modern Teams micro-frontends
-  app.commandLine.appendSwitch('js-flags', '--max-old-space-size=2048');
+  if (lowHardwareMode) {
+    // Low-spec branch PC profile: tighter heap and cache footprints
+    app.commandLine.appendSwitch('js-flags', '--max-old-space-size=896');
+    app.commandLine.appendSwitch('disk-cache-size', '134217728'); // 128 MB max
+    app.commandLine.appendSwitch('media-cache-size', '67108864'); // 64 MB max
+    app.commandLine.appendSwitch('disable-gpu-vsync');
+  } else {
+    app.commandLine.appendSwitch('js-flags', '--max-old-space-size=2048');
+    app.commandLine.appendSwitch('disk-cache-size', '536870912'); // 512 MB max
+    app.commandLine.appendSwitch('media-cache-size', '268435456'); // 256 MB max
+  }
 
-  // 2. Cap in-memory and disk cache sizes to avoid unbounded growth while leaving room for hashed packages
-  app.commandLine.appendSwitch('disk-cache-size', '536870912'); // 512 MB max
-  app.commandLine.appendSwitch('media-cache-size', '268435456'); // 256 MB max
-
-  // 3. Disable unnecessary background Chromium subsystems
+  // Disable unnecessary background Chromium subsystems
   app.commandLine.appendSwitch('disable-breakpad');
   app.commandLine.appendSwitch('disable-component-update');
   app.commandLine.appendSwitch('disable-domain-reliability');
   app.commandLine.appendSwitch('disable-sync');
 
-  // 4. Features to enable / disable for low footprint, stable display, and fast media
   const enableFeatures = [];
   if (process.platform === 'linux') {
     enableFeatures.push('WebRTCPipeWireCapturer', 'PulseaudioLoopbackForCast');

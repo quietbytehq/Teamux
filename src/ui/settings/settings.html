@@ -9,14 +9,23 @@
 <body>
   <div class="settings-container">
     <header class="settings-header">
-      <h2>Teamux Preferences</h2>
-      <p>Configure Linux integration, Teams account, and display options</p>
+      <h2>Teamux v2.0.0 Preferences</h2>
+      <p>Configure account profiles, bandwidth guardian, low-hardware mode, and security</p>
     </header>
 
     <main class="settings-content">
       <section class="section">
-        <h3>Teams Account Edition</h3>
+        <h3>Teams Account &amp; Profile</h3>
         <div class="form-group">
+          <label for="activeProfile">Active Account Profile (Isolated Session):</label>
+          <select id="activeProfile" class="input">
+            <option value="default">Work / Default Profile</option>
+            <option value="work2">Work Account 2 (Isolated)</option>
+            <option value="personal">Personal Account (Isolated)</option>
+          </select>
+          <span class="field-hint">Switch between separate Microsoft 365 organizations without signing out.</span>
+        </div>
+        <div class="form-group" style="margin-top: 10px;">
           <label for="teamsUrl">Teams Environment:</label>
           <select id="teamsUrl" class="input">
             <option value="https://teams.cloud.microsoft/">Work / School (teams.cloud.microsoft)</option>
@@ -24,12 +33,65 @@
             <option value="https://teams.live.com/">Personal / Family (Teams Live)</option>
             <option value="https://teams.microsoft.com/">Classic Teams (Legacy)</option>
           </select>
-          <span class="field-hint">The modern Teams v2 is recommended for Linux Wayland/PipeWire screen sharing.</span>
         </div>
       </section>
 
       <section class="section">
-        <h3>Window & System Tray</h3>
+        <h3>Network &amp; Bandwidth Guardian</h3>
+        <div class="checkbox-group">
+          <label>
+            <input type="checkbox" id="adaptiveNetworkGuardian">
+            <span>Adaptive Network Guardian (Auto-Throttle video when connection slows)</span>
+          </label>
+          <span class="field-hint">Automatically steps down video quality or pauses video to protect voice audio when ping or packet loss spikes in branch offices.</span>
+        </div>
+        <div class="form-group" style="margin-top: 10px;">
+          <label for="bandwidthMode">Default Video Bandwidth Mode:</label>
+          <select id="bandwidthMode" class="input">
+            <option value="auto">Auto Adaptive (720p ➔ 480p ➔ 360p ➔ Audio-First)</option>
+            <option value="720p">High Quality (720p @ 30 FPS / ~2.0 Mbps)</option>
+            <option value="480p">Balanced Office (480p @ 20 FPS / ~500 kbps - 75% savings)</option>
+            <option value="360p">Eco Bandwidth Saver (360p @ 15 FPS / ~250 kbps - 88% savings)</option>
+            <option value="audio-only">Audio-Only Priority (Camera off to save 100% video bandwidth)</option>
+          </select>
+        </div>
+      </section>
+
+      <section class="section">
+        <h3>Low-Hardware Performance &amp; Display</h3>
+        <div class="checkbox-group">
+          <label>
+            <input type="checkbox" id="lowHardwareMode">
+            <span>Low-Hardware / Potato PC Mode (Caps RAM &amp; enables 0% CPU camera pass-through)</span>
+          </label>
+          <span class="field-hint">Recommended for 4 GB RAM or Celeron/Pentium laptops. Requires restart for V8 heap limits.</span>
+        </div>
+        <div class="checkbox-group">
+          <label>
+            <input type="checkbox" id="hardwareAcceleration">
+            <span>Enable GPU Hardware Acceleration (VA-API / WebGL)</span>
+          </label>
+        </div>
+        <div class="checkbox-group">
+          <label>
+            <input type="checkbox" id="forceWayland">
+            <span>Force native Wayland platform on Linux (instead of auto-detect)</span>
+          </label>
+        </div>
+      </section>
+
+      <section class="section">
+        <h3>Privacy, Alerts &amp; System Tray</h3>
+        <div class="form-group" style="margin-bottom: 10px;">
+          <label for="privacyPin">Privacy Lock 4-Digit PIN (Optional, for Ctrl+L):</label>
+          <input type="password" id="privacyPin" class="input" maxlength="4" placeholder="Leave blank for instant unlock" style="width: 220px;">
+        </div>
+        <div class="checkbox-group">
+          <label>
+            <input type="checkbox" id="loudRingAlert">
+            <span>Loud Office Call Alert Chime (plays clear dual-tone on incoming calls)</span>
+          </label>
+        </div>
         <div class="checkbox-group">
           <label>
             <input type="checkbox" id="closeToTray">
@@ -51,53 +113,16 @@
         <div class="checkbox-group">
           <label>
             <input type="checkbox" id="enableUnreadBadges">
-            <span>Show unread message badge count in tray & dock</span>
+            <span>Show unread message badge count in tray &amp; dock</span>
           </label>
         </div>
       </section>
 
       <section class="section">
-        <h3>Network & Bandwidth Guardian</h3>
-        <div class="checkbox-group">
-          <label>
-            <input type="checkbox" id="adaptiveNetworkGuardian">
-            <span>Adaptive Network Guardian (Auto-Throttle video when connection slows)</span>
-          </label>
-          <span class="field-hint">Automatically steps down video quality or pauses video to protect voice audio when ping or packet loss spikes in branch offices.</span>
-        </div>
-        <div class="form-group" style="margin-top: 10px;">
-          <label for="bandwidthMode">Default Video Bandwidth Mode:</label>
-          <select id="bandwidthMode" class="input">
-            <option value="auto">Auto Adaptive (720p ➔ 480p ➔ 360p ➔ Audio-First)</option>
-            <option value="720p">High Quality (720p @ 30 FPS / ~2.0 Mbps)</option>
-            <option value="480p">Balanced Office (480p @ 20 FPS / ~500 kbps - 75% savings)</option>
-            <option value="360p">Eco Bandwidth Saver (360p @ 15 FPS / ~250 kbps - 88% savings)</option>
-            <option value="audio-only">Audio-Only Priority (Camera off to save 100% video bandwidth)</option>
-          </select>
-        </div>
-      </section>
-
-      <section class="section">
-        <h3>Hardware & Display</h3>
-        <div class="checkbox-group">
-          <label>
-            <input type="checkbox" id="hardwareAcceleration">
-            <span>Enable GPU Hardware Acceleration (VA-API / WebGL)</span>
-          </label>
-          <span class="field-hint">Required for background blur and hardware-accelerated video decoding. Requires restart.</span>
-        </div>
-        <div class="checkbox-group">
-          <label>
-            <input type="checkbox" id="forceWayland">
-            <span>Force native Wayland platform (instead of auto-detect)</span>
-          </label>
-        </div>
-      </section>
-
-      <section class="section">
-        <h3>Session & Storage</h3>
-        <div class="button-row">
-          <button id="btnClearCache" class="btn btn-warning" type="button">Clear Cache & Reset Session</button>
+        <h3>Updates &amp; Session</h3>
+        <div class="button-row" style="display:flex; gap:10px;">
+          <button id="btnCheckUpdates" class="btn btn-secondary" type="button">Check for Updates</button>
+          <button id="btnClearCache" class="btn btn-warning" type="button">Clear Cache &amp; Reset Session</button>
         </div>
       </section>
     </main>
@@ -106,7 +131,7 @@
       <div id="status-msg" class="status-msg"></div>
       <div class="actions">
         <button id="btnCancel" class="btn btn-secondary" type="button">Cancel</button>
-        <button id="btnSave" class="btn btn-primary" type="button">Save & Apply</button>
+        <button id="btnSave" class="btn btn-primary" type="button">Save &amp; Apply</button>
       </div>
     </footer>
   </div>

@@ -1,38 +1,71 @@
 // src/main/media-handler.js
 // Handles WebRTC media permissions, V4L2 cameras, and Wayland/X11 screen sharing
+// Hardened: Whitelists only trusted Microsoft/Teams origins and required permissions.
 
 const { BrowserWindow, desktopCapturer, ipcMain } = require('electron');
 const path = require('path');
 
 let activePickerWindow = null;
 let activePickerCallback = null;
+let pickerIpcRegistered = false;
 
-function setupMediaHandlers(session, getMainWindow) {
-  // 1. Unconditionally approve media, camera, microphone, speaker selection, notifications, and screen capture
-  session.setPermissionRequestHandler((webContents, permission, callback) => {
-    callback(true);
+const TRUSTED_HOST_REGEX = /(^|\.)(teams\.cloud\.microsoft|teams\.microsoft\.com|cloud\.microsoft|teams\.live\.com|microsoft\.com|microsoftonline\.com|live\.com|office\.com|sharepoint\.com|skype\.com|msftauth\.net)$/i;
+
+const ALLOWED_PERMISSIONS = new Set([
+  'media',
+  'mediaKeySystem',
+  'notifications',
+  'display-capture',
+  'fullscreen',
+  'clipboard-sanitized-write',
+  'clipboard-read',
+  'speaker-selection',
+  'pointerLock',
+  'idle-detection'
+]);
+
+function isTrustedOrigin(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return false;
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== 'https:') return false;
+    return TRUSTED_HOST_REGEX.test(parsed.hostname);
+  } catch (_) {
+    return false;
+  }
+}
+
+function setupMediaHandlers(targetSession, getMainWindow) {
+  // 1. Scoped permission handler: only trusted Microsoft origins & required permissions
+  targetSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    const originUrl = (details && details.requestingUrl) || (webContents && webContents.getURL()) || '';
+    const allowed = ALLOWED_PERMISSIONS.has(permission) && isTrustedOrigin(originUrl);
+    if (!allowed) {
+      console.warn(`[Teamux Security] Denied permission "${permission}" for origin: ${originUrl}`);
+    }
+    callback(allowed);
   });
 
-  session.setPermissionCheckHandler((webContents, permission) => {
-    return true;
+  targetSession.setPermissionCheckHandler((webContents, permission, requestingOrigin) => {
+    const originUrl = requestingOrigin || (webContents && webContents.getURL()) || '';
+    return ALLOWED_PERMISSIONS.has(permission) && isTrustedOrigin(originUrl);
   });
 
-  if (session.setDevicePermissionHandler) {
-    session.setDevicePermissionHandler(() => true);
+  if (targetSession.setDevicePermissionHandler) {
+    targetSession.setDevicePermissionHandler((details) => {
+      const originUrl = (details && details.origin) || '';
+      return isTrustedOrigin(originUrl);
+    });
   }
 
   // 2. Handle Screen & Window Sharing (getDisplayMedia)
-  session.setDisplayMediaRequestHandler(async (request, callback) => {
+  targetSession.setDisplayMediaRequestHandler(async (request, callback) => {
     const isWayland = Boolean(process.env.WAYLAND_DISPLAY || process.env.XDG_SESSION_TYPE === 'wayland');
 
     try {
       if (isWayland) {
-        // On Wayland, calling desktopCapturer.getSources({ types: ['screen'] }) activates the native
-        // system portal (xdg-desktop-portal-gnome / kde) allowing the user to pick entire displays or windows.
         const sources = await desktopCapturer.getSources({ types: ['screen'] });
-
         if (sources && sources.length > 0) {
-          // Provide system audio loopback so video audio / computer sound is streamed to participants
           callback({ video: sources[0], audio: 'loopback' });
         } else {
           callback();
@@ -40,9 +73,7 @@ function setupMediaHandlers(session, getMainWindow) {
         return;
       }
 
-      // X11 Session: Use custom picker dialog
       const mainWindow = getMainWindow();
-
       if (activePickerCallback) {
         activePickerCallback();
         activePickerCallback = null;
@@ -70,43 +101,44 @@ function setupMediaHandlers(session, getMainWindow) {
     }
   });
 
-  // Listen for picker selection from UI (X11)
-  ipcMain.on('screen-picker-select', async (event, sourceId) => {
-    if (!activePickerCallback) return;
+  // Register picker IPC listeners only once across profile switches
+  if (!pickerIpcRegistered) {
+    pickerIpcRegistered = true;
 
-    try {
-      const sources = await desktopCapturer.getSources({
-        types: ['screen', 'window'],
-        thumbnailSize: { width: 1, height: 1 }
-      });
-      const selected = sources.find(s => s.id === sourceId);
-
-      if (selected) {
-        activePickerCallback({ video: selected, audio: 'loopback' });
-      } else {
+    ipcMain.on('screen-picker-select', async (_event, sourceId) => {
+      if (!activePickerCallback) return;
+      try {
+        const sources = await desktopCapturer.getSources({
+          types: ['screen', 'window'],
+          thumbnailSize: { width: 1, height: 1 }
+        });
+        const selected = sources.find((s) => s.id === sourceId);
+        if (selected) {
+          activePickerCallback({ video: selected, audio: 'loopback' });
+        } else {
+          activePickerCallback();
+        }
+      } catch (e) {
+        console.error('[Teamux Media] Error selecting source:', e);
         activePickerCallback();
+      } finally {
+        activePickerCallback = null;
+        if (activePickerWindow && !activePickerWindow.isDestroyed()) {
+          activePickerWindow.close();
+        }
       }
-    } catch (e) {
-      console.error('[Teamux Media] Error selecting source:', e);
-      activePickerCallback();
-    } finally {
-      activePickerCallback = null;
+    });
+
+    ipcMain.on('screen-picker-cancel', () => {
+      if (activePickerCallback) {
+        activePickerCallback();
+        activePickerCallback = null;
+      }
       if (activePickerWindow && !activePickerWindow.isDestroyed()) {
         activePickerWindow.close();
       }
-    }
-  });
-
-  // Listen for picker cancel (X11)
-  ipcMain.on('screen-picker-cancel', () => {
-    if (activePickerCallback) {
-      activePickerCallback();
-      activePickerCallback = null;
-    }
-    if (activePickerWindow && !activePickerWindow.isDestroyed()) {
-      activePickerWindow.close();
-    }
-  });
+    });
+  }
 }
 
 function openPickerModal(sources, parentWindow) {
@@ -124,6 +156,7 @@ function openPickerModal(sources, parentWindow) {
     webPreferences: {
       preload: path.join(__dirname, '../preload/picker-preload.js'),
       contextIsolation: true,
+      sandbox: true,
       nodeIntegration: false
     }
   });
@@ -131,7 +164,7 @@ function openPickerModal(sources, parentWindow) {
   activePickerWindow.loadFile(path.join(__dirname, '../ui/picker/picker.html'));
 
   activePickerWindow.webContents.on('did-finish-load', () => {
-    const serializedSources = sources.map(s => ({
+    const serializedSources = sources.map((s) => ({
       id: s.id,
       name: s.name,
       thumbnail: s.thumbnail ? s.thumbnail.toDataURL() : null,
@@ -151,4 +184,4 @@ function openPickerModal(sources, parentWindow) {
   });
 }
 
-module.exports = { setupMediaHandlers };
+module.exports = { setupMediaHandlers, isTrustedOrigin };

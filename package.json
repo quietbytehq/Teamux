@@ -2,8 +2,8 @@
   "name": "teamux",
   "productName": "Teamux",
   "desktopName": "teamux.desktop",
-  "version": "1.0.0",
-  "description": "Unofficial Microsoft Teams desktop client for Linux and Windows with Adaptive Network Guardian, Studio Camera, and low-bandwidth optimization.",
+  "version": "2.0.0",
+  "description": "Unofficial Microsoft Teams desktop client for Linux and Windows with Adaptive Network Guardian, Low-Hardware Mode, Studio Camera, and Hardened Isolation.",
   "main": "src/main/index.js",
   "author": "QuietByte <hello@quietbytehq.uk>",
   "license": "Apache-2.0",
@@ -15,13 +15,14 @@
   "scripts": {
     "start": "electron . --no-sandbox",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder --linux AppImage deb tar.gz --win portable zip",
-    "dist:linux": "electron-builder --linux AppImage deb tar.gz",
+    "dist": "electron-builder --linux AppImage deb tar.gz snap pacman --win portable zip",
+    "dist:linux": "electron-builder --linux AppImage deb tar.gz snap pacman",
     "dist:win": "electron-builder --win portable zip",
     "dist:deb": "electron-builder --linux deb",
     "dist:appimage": "electron-builder --linux AppImage",
     "dist:tar": "electron-builder --linux tar.gz",
-    "dist:snap": "electron-builder --linux snap"
+    "dist:snap": "electron-builder --linux snap",
+    "dist:pacman": "electron-builder --linux pacman"
   },
   "keywords": [
     "teams",

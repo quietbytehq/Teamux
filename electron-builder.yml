@@ -24,6 +24,12 @@ linux:
     - target: tar.gz
       arch:
         - x64
+    - target: snap
+      arch:
+        - x64
+    - target: pacman
+      arch:
+        - x64
   maintainer: QuietByte <hello@quietbytehq.uk>
   syncDesktopName: true
   category: Network

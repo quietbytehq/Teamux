@@ -1,12 +1,13 @@
 // src/main/index.js
-// Main process entry point for Teamux
+// Main process entry point for Teamux v2.0.0
 
 const { app, BrowserWindow, session, ipcMain, shell, screen, dialog } = require('electron');
 const path = require('path');
+const https = require('https');
 const { SettingsStore } = require('./store');
 const { configureAppFlags } = require('./flags');
 const { setupUserAgent } = require('./user-agent');
-const { setupMediaHandlers } = require('./media-handler');
+const { setupMediaHandlers, isTrustedOrigin } = require('./media-handler');
 const { createTray, setTrayUnreadCount } = require('./tray');
 const { buildAppMenu } = require('./menu');
 
@@ -29,13 +30,45 @@ if (process.defaultApp) {
 // 2. Initialize Persistent Store
 const store = new SettingsStore();
 
-// 3. Configure Chromium & Linux / Wayland / PipeWire Flags
+// 3. Configure Chromium & Linux / Wayland / PipeWire / Low-Hardware Flags
 configureAppFlags(store);
 
 let mainWindow = null;
 let settingsWindow = null;
 const allActiveWindows = new Set();
+const configuredSessions = new Set();
 app.isQuitting = false;
+
+const ALLOWED_EXTERNAL_PROTOCOLS = new Set(['https:', 'http:', 'mailto:']);
+const ALLOWED_PROFILES = new Set(['default', 'work2', 'personal']);
+const ALLOWED_BANDWIDTH_MODES = new Set(['auto', '720p', '480p', '360p', 'audio-only']);
+
+function openSafeExternalUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return;
+  try {
+    const parsed = new URL(rawUrl);
+    if (!ALLOWED_EXTERNAL_PROTOCOLS.has(parsed.protocol)) {
+      console.warn(`[Teamux Security] Blocked unsafe external protocol: ${parsed.protocol}`);
+      return;
+    }
+    shell.openExternal(parsed.toString());
+  } catch (_) {
+    console.warn('[Teamux Security] Blocked malformed external URL.');
+  }
+}
+
+function getProfilePartition(profileKey) {
+  const safeKey = ALLOWED_PROFILES.has(profileKey) ? profileKey : 'default';
+  if (safeKey === 'default') return undefined; // defaultSession preserves existing logins on upgrade
+  return `persist:teamux_${safeKey}`;
+}
+
+function ensureSessionConfigured(targetSession) {
+  if (!targetSession || configuredSessions.has(targetSession)) return;
+  configuredSessions.add(targetSession);
+  setupUserAgent(targetSession);
+  setupMediaHandlers(targetSession, () => mainWindow);
+}
 
 // Clamp and validate window bounds so the window never goes off-screen
 function sanitizeWindowBounds(bounds) {
@@ -54,17 +87,15 @@ function sanitizeWindowBounds(bounds) {
     };
   }
 
-  // Find the display containing the saved bounds, or fallback to primary
   const targetDisplay = screen.getDisplayMatching(bounds) || primaryDisplay;
   const area = targetDisplay.workArea;
 
-  let width = Math.max(800, Math.min(bounds.width, area.width));
-  let height = Math.max(560, Math.min(bounds.height, area.height));
+  const width = Math.max(800, Math.min(bounds.width, area.width));
+  const height = Math.max(560, Math.min(bounds.height, area.height));
 
   let x = bounds.x;
   let y = bounds.y;
 
-  // Ensure titlebar (top 60px) and at least 300px width are well inside the visible area
   if (typeof x !== 'number' || x < area.x || x + 300 > area.x + area.width) {
     x = area.x + Math.max(0, Math.round((area.width - width) / 2));
   }
@@ -101,16 +132,128 @@ function resetMainWindowPosition() {
   store.set('isMaximized', false);
 }
 
+function triggerPrivacyLock() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('toggle-privacy-lock');
+  }
+}
+
+function compareVersions(a, b) {
+  const pa = String(a).replace(/^v/i, '').split('.').map(Number);
+  const pb = String(b).replace(/^v/i, '').split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const na = pa[i] || 0;
+    const nb = pb[i] || 0;
+    if (na > nb) return 1;
+    if (na < nb) return -1;
+  }
+  return 0;
+}
+
+function checkForUpdates(silent = false) {
+  const currentVersion = app.getVersion();
+  const options = {
+    hostname: 'api.github.com',
+    path: '/repos/quietbytehq/Teamux/releases/latest',
+    headers: { 'User-Agent': `Teamux/${currentVersion}` },
+    timeout: 7000
+  };
+
+  const req = https.get(options, (res) => {
+    let body = '';
+    res.on('data', (chunk) => { body += chunk; });
+    res.on('end', () => {
+      try {
+        const data = JSON.parse(body);
+        const latestTag = data && data.tag_name;
+        if (!latestTag) {
+          if (!silent) {
+            dialog.showMessageBox(mainWindow, {
+              type: 'info',
+              title: 'Teamux Updates',
+              message: `You are running Teamux v${currentVersion}. Could not read latest release tag.`
+            });
+          }
+          return;
+        }
+        const cmp = compareVersions(latestTag, currentVersion);
+        if (cmp > 0) {
+          dialog.showMessageBox(mainWindow, {
+            type: 'info',
+            title: 'Teamux Update Available',
+            message: `A new version of Teamux (${latestTag}) is available!`,
+            detail: `You are currently running v${currentVersion}. Open the GitHub Releases page to download the latest Windows, Linux, or Snap build.`,
+            buttons: ['Download Update', 'Later'],
+            defaultId: 0,
+            cancelId: 1
+          }).then(({ response }) => {
+            if (response === 0) {
+              openSafeExternalUrl(data.html_url || 'https://github.com/quietbytehq/Teamux/releases/latest');
+            }
+          }).catch(() => {});
+        } else if (!silent) {
+          dialog.showMessageBox(mainWindow, {
+            type: 'info',
+            title: 'Teamux Up to Date',
+            message: `You are on the latest version (v${currentVersion}).`
+          });
+        }
+      } catch (_) {
+        if (!silent) {
+          dialog.showMessageBox(mainWindow, {
+            type: 'warning',
+            title: 'Update Check Failed',
+            message: 'Unable to check for updates right now. Please check your internet connection.'
+          });
+        }
+      }
+    });
+  });
+
+  req.on('error', () => {
+    if (!silent) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        title: 'Update Check Failed',
+        message: 'Unable to reach GitHub Releases. Please verify your internet connection.'
+      });
+    }
+  });
+  req.on('timeout', () => { req.destroy(); });
+}
+
+function attachNavigationSecurity(win) {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (!isTrustedOrigin(url)) {
+      openSafeExternalUrl(url);
+      return { action: 'deny' };
+    }
+    return { action: 'allow' };
+  });
+
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!isTrustedOrigin(url)) {
+      event.preventDefault();
+      openSafeExternalUrl(url);
+    }
+  });
+}
+
 async function createMainWindow() {
   const rawBounds = store.get('windowBounds', { width: 1280, height: 820 });
   const bounds = sanitizeWindowBounds(rawBounds);
   const isMaximized = store.get('isMaximized', false);
   const startMinimized = store.get('startMinimized', false);
+  const lowHardwareMode = store.get('lowHardwareMode', false);
+  const activeProfile = store.get('activeProfile', 'default');
+  const partition = getProfilePartition(activeProfile);
+  const targetSession = partition ? session.fromPartition(partition) : session.defaultSession;
+  ensureSessionConfigured(targetSession);
 
   const iconPath = path.join(__dirname, '../../assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
 
   mainWindow = new BrowserWindow({
-    title: 'Teamux - Microsoft Teams',
+    title: `Teamux - Microsoft Teams${activeProfile !== 'default' ? ` (${activeProfile})` : ''}`,
     width: bounds.width,
     height: bounds.height,
     x: bounds.x,
@@ -123,10 +266,12 @@ async function createMainWindow() {
     autoHideMenuBar: false,
     webPreferences: {
       preload: path.join(__dirname, '../preload/teams-preload.js'),
-      contextIsolation: false,
+      partition,
+      contextIsolation: true,
+      sandbox: true,
       nodeIntegration: false,
-      spellcheck: true,
-      backgroundThrottling: false // Keep WebRTC active in background
+      spellcheck: !lowHardwareMode,
+      backgroundThrottling: true // Dynamically disabled while in an active call
     }
   });
 
@@ -136,8 +281,8 @@ async function createMainWindow() {
     mainWindow.maximize();
   }
 
-  // Track window dimension and save only sanitized bounds
   const saveBounds = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
     if (!mainWindow.isMaximized() && !mainWindow.isMinimized()) {
       const current = mainWindow.getBounds();
       store.set('windowBounds', sanitizeWindowBounds(current));
@@ -150,12 +295,10 @@ async function createMainWindow() {
 
   let lastCloseAttempt = 0;
 
-  // Window close behavior
   mainWindow.on('close', (event) => {
     if (app.isQuitting) return;
 
     const now = Date.now();
-    // Escape hatch: If user clicks close twice within 2.5 seconds, force quit immediately
     if (now - lastCloseAttempt < 2500) {
       console.log('[Teamux] Double-close detected: exiting application cleanly.');
       app.isQuitting = true;
@@ -173,7 +316,6 @@ async function createMainWindow() {
     saveBounds();
   });
 
-  // Minimize to tray behavior
   mainWindow.on('minimize', (event) => {
     if (store.get('minimizeToTray', false)) {
       event.preventDefault();
@@ -181,7 +323,6 @@ async function createMainWindow() {
     }
   });
 
-  // Crash & Unresponsiveness Watchdogs
   mainWindow.on('unresponsive', () => {
     console.warn('[Teamux] Window became unresponsive.');
     dialog.showMessageBox(mainWindow, {
@@ -192,7 +333,7 @@ async function createMainWindow() {
       defaultId: 1,
       cancelId: 0
     }).then(({ response }) => {
-      if (response === 1) {
+      if (response === 1 && mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.reload();
       } else if (response === 2) {
         app.isQuitting = true;
@@ -203,7 +344,7 @@ async function createMainWindow() {
 
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
     console.error('[Teamux] Renderer crashed or exited unexpectedly:', details.reason, 'code:', details.exitCode);
-    if (details.reason !== 'clean-exit' && !app.isQuitting) {
+    if (details.reason !== 'clean-exit' && !app.isQuitting && mainWindow && !mainWindow.isDestroyed()) {
       console.log('[Teamux] Recovering renderer: reloading Teams...');
       mainWindow.reload();
     }
@@ -214,32 +355,39 @@ async function createMainWindow() {
     mainWindow = null;
   });
 
-  // Manage pop-out / child windows (e.g. Teams pop-out meeting window or call window)
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    const isTeamsDomain = /(teams\.microsoft\.com|teams\.cloud\.microsoft|cloud\.microsoft|teams\.live\.com|login\.microsoftonline\.com|login\.live\.com|account\.live\.com|outlook\.office\.com|office\.com|sharepoint\.com|msftauth\.net)/i.test(url);
-    if (!isTeamsDomain) {
-      shell.openExternal(url);
-      return { action: 'deny' };
-    }
-    return { action: 'allow' };
-  });
+  attachNavigationSecurity(mainWindow);
 
-  mainWindow.webContents.on('did-create-window', (childWindow, { url }) => {
+  mainWindow.webContents.on('did-create-window', (childWindow) => {
     childWindow.setIcon(iconPath);
     childWindow.setMinimumSize(640, 480);
     allActiveWindows.add(childWindow);
+    attachNavigationSecurity(childWindow);
 
     childWindow.on('closed', () => {
       allActiveWindows.delete(childWindow);
     });
   });
 
-  // Load configured Teams URL
   const teamsUrl = store.get('teamsUrl', 'https://teams.cloud.microsoft/');
-  console.log(`[Teamux] Loading Microsoft Teams from: ${teamsUrl}`);
-  mainWindow.loadURL(teamsUrl);
+  const safeTeamsUrl = isTrustedOrigin(teamsUrl) ? teamsUrl : 'https://teams.cloud.microsoft/';
+  console.log(`[Teamux] Loading Microsoft Teams (${activeProfile}) from: ${safeTeamsUrl}`);
+  mainWindow.loadURL(safeTeamsUrl);
 
   return mainWindow;
+}
+
+async function switchAccountProfile(profileKey) {
+  const safeKey = ALLOWED_PROFILES.has(profileKey) ? profileKey : 'default';
+  if (store.get('activeProfile', 'default') === safeKey) return;
+  store.set('activeProfile', safeKey);
+
+  const oldWin = mainWindow;
+  mainWindow = null;
+  if (oldWin && !oldWin.isDestroyed()) {
+    oldWin.destroy();
+  }
+  await createMainWindow();
+  rebuildAppMenus();
 }
 
 function openSettingsDialog() {
@@ -253,8 +401,8 @@ function openSettingsDialog() {
     title: 'Teamux Preferences',
     parent: mainWindow && !mainWindow.isDestroyed() ? mainWindow : null,
     modal: true,
-    width: 600,
-    height: 640,
+    width: 620,
+    height: 690,
     resizable: false,
     minimizable: false,
     maximizable: false,
@@ -263,6 +411,7 @@ function openSettingsDialog() {
     webPreferences: {
       preload: path.join(__dirname, '../preload/settings-preload.js'),
       contextIsolation: true,
+      sandbox: true,
       nodeIntegration: false
     }
   });
@@ -274,29 +423,28 @@ function openSettingsDialog() {
   });
 }
 
-// Focus window when a second instance tries to run
+function rebuildAppMenus() {
+  buildAppMenu(mainWindow, openSettingsDialog, {
+    bringAllToFront: bringAllTeamuxWindowsToFront,
+    resetPosition: resetMainWindowPosition,
+    switchProfile: switchAccountProfile,
+    activeProfile: store.get('activeProfile', 'default'),
+    togglePrivacyLock: triggerPrivacyLock,
+    checkForUpdates: () => checkForUpdates(false)
+  });
+}
+
 app.on('second-instance', () => {
   bringAllTeamuxWindowsToFront();
 });
 
 app.whenReady().then(async () => {
-  // Setup User Agent & Header spoofing
-  setupUserAgent(session.defaultSession);
-
-  // Setup WebRTC Screen Sharing & Camera permissions
-  setupMediaHandlers(session.defaultSession, () => mainWindow);
-
-  // Create Window
   await createMainWindow();
-
-  // Create System Tray
-  createTray(mainWindow, openSettingsDialog, bringAllTeamuxWindowsToFront);
-
-  // Build Desktop Menu
-  buildAppMenu(mainWindow, openSettingsDialog, {
-    bringAllToFront: bringAllTeamuxWindowsToFront,
-    resetPosition: resetMainWindowPosition
+  createTray(mainWindow, openSettingsDialog, bringAllTeamuxWindowsToFront, {
+    togglePrivacyLock: triggerPrivacyLock,
+    checkForUpdates: () => checkForUpdates(false)
   });
+  rebuildAppMenus();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -311,7 +459,6 @@ let quitTimeout = null;
 
 app.on('before-quit', () => {
   app.isQuitting = true;
-  // Fail-safe: ensure process terminates within 1.5s even if a renderer process is unresponsive
   if (!quitTimeout) {
     quitTimeout = setTimeout(() => {
       console.log('[Teamux] Forced termination on quit timeout.');
@@ -347,13 +494,14 @@ const handleTermination = () => {
 process.on('SIGINT', handleTermination);
 process.on('SIGTERM', handleTermination);
 
-// IPC: Unread badge update from preload
-ipcMain.on('unread-badge-update', (_event, count) => {
+// IPC: Unread badge update from preload (validated)
+ipcMain.on('unread-badge-update', (_event, rawCount) => {
+  const count = Number.isInteger(rawCount) && rawCount >= 0 ? Math.min(rawCount, 9999) : 0;
   if (store.get('enableUnreadBadges', true)) {
     if (app.setBadgeCount) {
       app.setBadgeCount(count);
     }
-    setTrayUnreadCount(count, mainWindow, openSettingsDialog);
+    setTrayUnreadCount(count, mainWindow, openSettingsDialog, bringAllTeamuxWindowsToFront);
   }
 });
 
@@ -362,29 +510,91 @@ ipcMain.on('bring-all-to-front', () => {
   bringAllTeamuxWindowsToFront();
 });
 
+// IPC: Forward studio open request from child/calling frames to top frame safely
+ipcMain.on('show-studio-request', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('show-studio');
+  }
+});
+
+// IPC: Dynamic backgroundThrottling based on active WebRTC call
+ipcMain.on('call-state-changed', (_event, isActive) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.setBackgroundThrottling(!Boolean(isActive));
+  }
+});
+
 // IPC: Reset window position
 ipcMain.on('reset-window-position', () => {
   resetMainWindowPosition();
 });
 
-// IPC: Settings management
+// IPC: Runtime config for preload/page-hook
+ipcMain.handle('get-runtime-config', () => {
+  return {
+    lowHardwareMode: !!store.get('lowHardwareMode', false),
+    adaptiveNetworkGuardian: store.get('adaptiveNetworkGuardian', true) !== false,
+    bandwidthMode: store.get('bandwidthMode', 'auto'),
+    privacyPin: String(store.get('privacyPin', '') || ''),
+    loudRingAlert: !!store.get('loudRingAlert', false),
+    activeProfile: store.get('activeProfile', 'default')
+  };
+});
+
+// IPC: Check for updates from Settings
+ipcMain.handle('check-for-updates', () => {
+  checkForUpdates(false);
+  return true;
+});
+
+// IPC: Settings management (validated)
 ipcMain.handle('get-settings', () => {
   return store.getAll();
 });
 
-ipcMain.handle('save-settings', (_event, newSettings) => {
-  const oldUrl = store.get('teamsUrl');
-  store.setAll(newSettings);
+ipcMain.handle('save-settings', async (_event, newSettings) => {
+  if (!newSettings || typeof newSettings !== 'object') return false;
 
-  if (mainWindow && newSettings.teamsUrl && newSettings.teamsUrl !== oldUrl) {
-    mainWindow.loadURL(newSettings.teamsUrl);
+  const oldUrl = store.get('teamsUrl');
+  const oldProfile = store.get('activeProfile', 'default');
+
+  const sanitized = {
+    teamsUrl: isTrustedOrigin(newSettings.teamsUrl) ? newSettings.teamsUrl : oldUrl,
+    activeProfile: ALLOWED_PROFILES.has(newSettings.activeProfile) ? newSettings.activeProfile : oldProfile,
+    closeToTray: Boolean(newSettings.closeToTray),
+    minimizeToTray: Boolean(newSettings.minimizeToTray),
+    startMinimized: Boolean(newSettings.startMinimized),
+    enableUnreadBadges: Boolean(newSettings.enableUnreadBadges),
+    adaptiveNetworkGuardian: Boolean(newSettings.adaptiveNetworkGuardian),
+    bandwidthMode: ALLOWED_BANDWIDTH_MODES.has(newSettings.bandwidthMode) ? newSettings.bandwidthMode : 'auto',
+    hardwareAcceleration: Boolean(newSettings.hardwareAcceleration),
+    lowHardwareMode: Boolean(newSettings.lowHardwareMode),
+    forceWayland: Boolean(newSettings.forceWayland),
+    loudRingAlert: Boolean(newSettings.loudRingAlert),
+    privacyPin: typeof newSettings.privacyPin === 'string' && /^\d{4}$/.test(newSettings.privacyPin.trim())
+      ? newSettings.privacyPin.trim()
+      : ''
+  };
+
+  store.setAll(sanitized);
+
+  if (sanitized.activeProfile !== oldProfile) {
+    await switchAccountProfile(sanitized.activeProfile);
+    return true;
+  }
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('config-updated', sanitized);
+    if (sanitized.teamsUrl !== oldUrl) {
+      mainWindow.loadURL(sanitized.teamsUrl);
+    }
   }
   return true;
 });
 
 ipcMain.handle('clear-cache', async () => {
-  if (mainWindow) {
-    await session.defaultSession.clearStorageData();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    await mainWindow.webContents.session.clearStorageData();
     mainWindow.reload();
   }
   return true;

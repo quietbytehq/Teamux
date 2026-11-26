@@ -14,15 +14,19 @@ class SettingsStore {
       minimizeToTray: false,
       closeToTray: false,
       hardwareAcceleration: true,
+      lowHardwareMode: false,
       forceWayland: false,
       teamsUrl: 'https://teams.cloud.microsoft/',
+      activeProfile: 'default',
       windowBounds: { width: 1280, height: 820 },
       isMaximized: false,
       enableUnreadBadges: true,
       enableNotifications: true,
       adaptiveNetworkGuardian: true,
       bandwidthMode: 'auto',
-      configVersion: 2
+      privacyPin: '',
+      loudRingAlert: false,
+      configVersion: 3
     };
     this.data = this.load();
   }
@@ -32,12 +36,13 @@ class SettingsStore {
       if (fs.existsSync(this.configPath)) {
         const raw = fs.readFileSync(this.configPath, 'utf8');
         const parsed = JSON.parse(raw);
-        // Migration: Default closeToTray to false for users upgrading from v0.1/v0.2
-        // so clicking the window close button cleanly exits rather than hanging in the background
         if (!parsed.configVersion || parsed.configVersion < 2) {
           parsed.closeToTray = false;
           parsed.minimizeToTray = false;
           parsed.configVersion = 2;
+        }
+        if (parsed.configVersion < 3) {
+          parsed.configVersion = 3;
         }
         return Object.assign({}, this.defaults, parsed);
       }

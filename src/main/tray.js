@@ -1,13 +1,15 @@
 // src/main/tray.js
-// System Tray integration for Linux desktops
+// Cross-platform System Tray integration for Teamux (Linux & Windows)
 
 const { Tray, Menu, app } = require('electron');
 const path = require('path');
 
 let tray = null;
 let currentUnread = 0;
+let trayActions = {};
 
-function createTray(mainWindow, openSettings, bringAllToFront) {
+function createTray(mainWindow, openSettings, bringAllToFront, actions = {}) {
+  trayActions = actions;
   const assetsDir = path.join(__dirname, '../../assets');
   const iconPath = path.join(assetsDir, 'tray-idle.png');
 
@@ -55,6 +57,14 @@ function updateContextMenu(mainWindow, openSettings, bringAllToFront) {
         }
       }
     },
+    {
+      label: 'Privacy Lock (Ctrl+L)',
+      click: () => {
+        if (typeof trayActions.togglePrivacyLock === 'function') {
+          trayActions.togglePrivacyLock();
+        }
+      }
+    },
     { type: 'separator' },
     {
       label: currentUnread > 0 ? `Unread Messages: ${currentUnread}` : 'No unread messages',
@@ -75,6 +85,14 @@ function updateContextMenu(mainWindow, openSettings, bringAllToFront) {
       click: () => {
         if (typeof openSettings === 'function') {
           openSettings();
+        }
+      }
+    },
+    {
+      label: 'Check for Updates...',
+      click: () => {
+        if (typeof trayActions.checkForUpdates === 'function') {
+          trayActions.checkForUpdates();
         }
       }
     },
@@ -100,7 +118,7 @@ function setTrayUnreadCount(count, mainWindow, openSettings, bringAllToFront) {
   const iconName = count > 0 ? 'tray-unread.png' : 'tray-idle.png';
   tray.setImage(path.join(assetsDir, iconName));
 
-  const tip = count > 0 
+  const tip = count > 0
     ? `Teamux - ${count} unread notification${count > 1 ? 's' : ''}`
     : 'Teamux - Microsoft Teams';
   tray.setToolTip(tip);
