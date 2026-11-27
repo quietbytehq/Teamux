@@ -53,8 +53,10 @@ Download binaries and the **Picture-Based PDF User Guide** from [Releases](https
 * **Portable Tarball (`.tar.gz`):** `tar -xvf teamux-v2.0.0-linux-x64.tar.gz`
 
 ### 🪟 Windows
-* **Portable Executable:** Download and double-click `teamux-v2.0.0-windows-portable-x64.exe` (no installation or admin rights required).
-* **Standalone Zip:** Extract `teamux-v2.0.0-windows-x64.zip` and run `Teamux.exe`.
+* **MSI Installer (Enterprise / Intune / GPO):** Download [`teamux-v2.0.0-windows-x64.msi`](https://github.com/quietbytehq/teamux/releases/download/v2.0.0/teamux-v2.0.0-windows-x64.msi)
+* **Setup Installer (`.exe`):** Download [`teamux-v2.0.0-windows-setup-x64.exe`](https://github.com/quietbytehq/teamux/releases/download/v2.0.0/teamux-v2.0.0-windows-setup-x64.exe)
+* **Portable Executable:** Download and double-click [`teamux-v2.0.0-windows-portable-x64.exe`](https://github.com/quietbytehq/teamux/releases/download/v2.0.0/teamux-v2.0.0-windows-portable-x64.exe) (no installation or admin rights required).
+* **Standalone Zip:** Extract [`teamux-v2.0.0-windows-x64.zip`](https://github.com/quietbytehq/teamux/releases/download/v2.0.0/teamux-v2.0.0-windows-x64.zip) and run `Teamux.exe`.
 
 ---
 
