@@ -1349,11 +1349,30 @@ function initTeamuxPageHook() {
     callBanner.appendChild(callBtn);
     document.body.appendChild(callBanner);
     callBanner.addEventListener('click', () => {
+      // Minimize Studio card so it never covers Teams' bottom-right PIP window
+      if (card && pill) {
+        card.style.display = 'none';
+        pill.style.display = 'flex';
+      }
+
       // Delay slightly so mainWindow click finishes before focusing any pop-out meeting window
       setTimeout(() => window.teamuxBridge?.bringAllToFront(), 60);
 
+      const collectRoots = (root, out = []) => {
+        if (!root) return out;
+        out.push(root);
+        try {
+          const all = root.querySelectorAll('*');
+          for (const el of all) {
+            if (el.shadowRoot) collectRoots(el.shadowRoot, out);
+          }
+        } catch (_) {}
+        return out;
+      };
+
       const findAndClickReturn = (rootDoc) => {
         if (!rootDoc) return false;
+        const roots = collectRoots(rootDoc);
         const selectors = [
           '[data-tid="return-to-call-button"]',
           '[data-tid="calling-header-return-button"]',
@@ -1370,16 +1389,28 @@ function initTeamuxPageHook() {
           '[aria-label*="Resume call" i]',
           '[aria-label*="Ongoing call" i]'
         ];
-        for (const sel of selectors) {
-          const el = rootDoc.querySelector(sel);
-          if (el) { el.click(); return true; }
-        }
-        const btns = rootDoc.querySelectorAll('button, [role="button"]');
-        for (const b of btns) {
-          const txt = (b.textContent || '').trim();
-          if (/^(return to call|back to call|return to meeting|tap to return)/i.test(txt)) {
-            b.click();
-            return true;
+        for (const r of roots) {
+          for (const sel of selectors) {
+            const el = r.querySelector(sel);
+            if (el) { el.click(); return true; }
+          }
+          const btns = r.querySelectorAll('button, [role="button"]');
+          for (const b of btns) {
+            const txt = (b.textContent || '').trim();
+            if (/^(return to call|back to call|return to meeting|tap to return)/i.test(txt)) {
+              b.click();
+              return true;
+            }
+          }
+          // Detect Teams v2 floating PIP video box in corner
+          const videos = r.querySelectorAll('video');
+          for (const v of videos) {
+            const rect = v.getBoundingClientRect();
+            if (rect.width > 60 && rect.width < 460 && rect.height > 40 && rect.height < 360) {
+              const target = v.closest('button, [role="button"], [tabindex]') || v.parentElement || v;
+              target.click();
+              return true;
+            }
           }
         }
         return false;
@@ -1398,7 +1429,6 @@ function initTeamuxPageHook() {
         }
       }
 
-      // Fallback for New Teams v2 SPA when navigating to Calendar/Chat hides the PIP completely
       if (!foundBtn && window.history.length > 1) {
         window.history.back();
       }
