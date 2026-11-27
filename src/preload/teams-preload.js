@@ -639,6 +639,8 @@ function initTeamuxPageHook() {
       let lastRenderTime = 0;
       let slateDrawnMode = null;
 
+      let slateKeepAliveTimer = null;
+
       const scheduleNextFrame = () => {
         if (!isRunning) return;
         if (typeof video.requestVideoFrameCallback === 'function') {
@@ -648,9 +650,22 @@ function initTeamuxPageHook() {
         }
       };
 
+      const scheduleSlateKeepAlive = () => {
+        if (!isRunning || slateKeepAliveTimer !== null) return;
+        // 4 FPS gentle keep-alive prevents Teams WebRTC from marking the camera as disabled/starved
+        slateKeepAliveTimer = setTimeout(() => {
+          slateKeepAliveTimer = null;
+          if (isRunning) processFrame();
+        }, 250);
+      };
+
       const cleanup = () => {
         if (!isRunning) return;
         isRunning = false;
+        if (slateKeepAliveTimer !== null) {
+          clearTimeout(slateKeepAliveTimer);
+          slateKeepAliveTimer = null;
+        }
         if (frameHandle !== null) {
           if (typeof video.cancelVideoFrameCallback === 'function') {
             try { video.cancelVideoFrameCallback(frameHandle); } catch (_) {}
@@ -678,7 +693,10 @@ function initTeamuxPageHook() {
         },
         resumeRender: () => {
           if (!isRunning) return;
-          slateDrawnMode = null;
+          if (slateKeepAliveTimer !== null) {
+            clearTimeout(slateKeepAliveTimer);
+            slateKeepAliveTimer = null;
+          }
           if (frameHandle === null) {
             scheduleNextFrame();
           }
@@ -686,45 +704,128 @@ function initTeamuxPageHook() {
       };
       currentCameraContext = cameraCtx;
 
-      const drawStaticSlate = (mode, titleText, sub1, sub2, accentColor) => {
+      const drawAudioFirstSlate = () => {
+        const w = canvas.width;
+        const h = canvas.height;
         ctx.filter = 'none';
         ctx.globalAlpha = 1.0;
         ctx.globalCompositeOperation = 'source-over';
         ctx.fillStyle = '#0f172a';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillRect(0, 0, w, h);
 
-        ctx.fillStyle = accentColor;
-        ctx.font = 'bold 20px sans-serif';
+        ctx.fillStyle = '#ef4444';
+        ctx.font = 'bold 22px "Segoe UI", system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(titleText, canvas.width / 2, canvas.height / 2 - 20);
+        ctx.fillText('🔴 Audio-First Mode Active', w / 2, h / 2 - 20);
 
         ctx.fillStyle = '#94a3b8';
-        ctx.font = '13px sans-serif';
-        ctx.fillText(sub1, canvas.width / 2, canvas.height / 2 + 14);
-        ctx.fillText(sub2, canvas.width / 2, canvas.height / 2 + 34);
-        slateDrawnMode = mode;
+        ctx.font = '14px "Segoe UI", system-ui, sans-serif';
+        ctx.fillText('Video upload paused to protect voice audio quality.', w / 2, h / 2 + 14);
+        ctx.fillText('Resuming automatically when network clears.', w / 2, h / 2 + 36);
+      };
+
+      const drawBeRightBackSlate = () => {
+        const w = canvas.width;
+        const h = canvas.height;
+        const t = performance.now() / 1000;
+        ctx.filter = 'none';
+        ctx.globalAlpha = 1.0;
+        ctx.globalCompositeOperation = 'source-over';
+
+        // Rich multi-stop dark cosmic gradient background
+        const bgGrad = ctx.createLinearGradient(0, 0, w, h);
+        bgGrad.addColorStop(0, '#090d1f');
+        bgGrad.addColorStop(0.5, '#1e1b4b');
+        bgGrad.addColorStop(1, '#311042');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, w, h);
+
+        // Soft colorful glowing ambient orbs
+        const orb1 = ctx.createRadialGradient(w * 0.2, h * 0.25, 10, w * 0.2, h * 0.25, w * 0.35);
+        orb1.addColorStop(0, 'rgba(56, 189, 248, 0.26)');
+        orb1.addColorStop(1, 'rgba(56, 189, 248, 0)');
+        ctx.fillStyle = orb1;
+        ctx.fillRect(0, 0, w, h);
+
+        const orb2 = ctx.createRadialGradient(w * 0.82, h * 0.78, 10, w * 0.82, h * 0.78, w * 0.38);
+        orb2.addColorStop(0, 'rgba(236, 72, 153, 0.26)');
+        orb2.addColorStop(1, 'rgba(236, 72, 153, 0)');
+        ctx.fillStyle = orb2;
+        ctx.fillRect(0, 0, w, h);
+
+        // Center frosted card with colorful gradient border
+        const cardW = Math.min(w * 0.82, 540);
+        const cardH = Math.min(h * 0.68, 250);
+        const cardX = (w - cardW) / 2;
+        const cardY = (h - cardH) / 2;
+        const radius = 20;
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
+        ctx.beginPath();
+        if (typeof ctx.roundRect === 'function') ctx.roundRect(cardX, cardY, cardW, cardH, radius);
+        else ctx.rect(cardX, cardY, cardW, cardH);
+        ctx.fill();
+
+        const borderGrad = ctx.createLinearGradient(cardX, cardY, cardX + cardW, cardY + cardH);
+        borderGrad.addColorStop(0, '#38bdf8');
+        borderGrad.addColorStop(0.35, '#a855f7');
+        borderGrad.addColorStop(0.7, '#ec4899');
+        borderGrad.addColorStop(1, '#fbbf24');
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = borderGrad;
+        ctx.stroke();
+
+        // Top pill badge
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = 'bold 13px "Segoe UI", system-ui, sans-serif';
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillText('☕  STEPPED AWAY FOR A MOMENT', w / 2, cardY + cardH * 0.22);
+
+        // Fancy colorful gradient main heading: "Be Right Back!"
+        const titleSize = Math.max(28, Math.min(46, Math.round(w * 0.06)));
+        ctx.font = `800 ${titleSize}px "Segoe UI", system-ui, sans-serif`;
+        const textGrad = ctx.createLinearGradient(w * 0.25, 0, w * 0.75, 0);
+        textGrad.addColorStop(0, '#38bdf8');
+        textGrad.addColorStop(0.35, '#c084fc');
+        textGrad.addColorStop(0.7, '#f472b6');
+        textGrad.addColorStop(1, '#fbbf24');
+        ctx.fillStyle = textGrad;
+        ctx.fillText('Be Right Back!', w / 2, cardY + cardH * 0.46);
+
+        // Clean subtitle
+        ctx.font = '500 15px "Segoe UI", system-ui, sans-serif';
+        ctx.fillStyle = '#e2e8f0';
+        ctx.fillText("I'll be back in the meeting shortly — thank you!", w / 2, cardY + cardH * 0.67);
+
+        // Animated pulsing dots + audio connected status
+        const activeDot = Math.floor(t * 2.5) % 3;
+        const dotColors = ['#38bdf8', '#c084fc', '#f472b6'];
+        for (let i = 0; i < 3; i++) {
+          ctx.beginPath();
+          ctx.arc(w / 2 - 18 + i * 18, cardY + cardH * 0.84, i === activeDot ? 5.5 : 3.5, 0, Math.PI * 2);
+          ctx.fillStyle = i === activeDot ? dotColors[i] : 'rgba(148, 163, 184, 0.45)';
+          ctx.fill();
+        }
       };
 
       const processFrame = () => {
         frameHandle = null;
         if (!isRunning) return;
 
-        // P3: Draw static Audio-First or Away slate once and pause render loop (0% CPU!)
+        // Keep-alive 4 FPS frames during Audio-First or Be Right Back so Teams never flags camera as disabled
         if (networkState.currentTier === 'audio-only') {
-          if (slateDrawnMode !== 'audio-only') {
-            drawStaticSlate('audio-only', '🔴 Audio-First Mode Active', 'Video upload paused to protect voice audio quality.', 'Resuming automatically when network clears.', '#ef4444');
-          }
+          drawAudioFirstSlate();
+          scheduleSlateKeepAlive();
           return;
         }
         if (studioState.awaySlateActive) {
-          if (slateDrawnMode !== 'away') {
-            drawStaticSlate('away', '⏸️ Stepped Away', 'Camera is temporarily paused.', 'Will resume shortly.', '#f59e0b');
-          }
+          drawBeRightBackSlate();
+          scheduleSlateKeepAlive();
           return;
         }
 
-        slateDrawnMode = null;
         scheduleNextFrame();
 
         const profile = QUALITY_PROFILES[networkState.currentTier] || QUALITY_PROFILES['720p'];
@@ -1050,7 +1151,7 @@ function initTeamuxPageHook() {
     paneRetouch.appendChild(createToggleRow('Studio Lighting', 'teamux-toggle-light', studioState.studioLightEnabled));
     paneRetouch.appendChild(createToggleRow('Portrait Focus (Vignette)', 'teamux-toggle-vignette', studioState.vignetteEnabled));
     paneRetouch.appendChild(createToggleRow('Mirror Camera (Flip)', 'teamux-toggle-mirror', studioState.mirrorCamera));
-    paneRetouch.appendChild(createToggleRow('Stepped Away Slate (Ctrl+Shift+V)', 'teamux-toggle-away', studioState.awaySlateActive));
+    paneRetouch.appendChild(createToggleRow('Be Right Back Screen (Ctrl+Shift+V)', 'teamux-toggle-away', studioState.awaySlateActive));
 
     const micDivider = document.createElement('div');
     micDivider.className = 'teamux-divider';
@@ -1244,9 +1345,48 @@ function initTeamuxPageHook() {
     callBanner.appendChild(callBtn);
     document.body.appendChild(callBanner);
     callBanner.addEventListener('click', () => {
-      window.teamuxBridge?.bringAllToFront();
-      const btn = document.querySelector('[data-tid="return-to-call-button"], [aria-label*="Return to call"], [aria-label*="Back to call"]');
-      if (btn) btn.click();
+      // Delay slightly so mainWindow click finishes before focusing any pop-out meeting window
+      setTimeout(() => window.teamuxBridge?.bringAllToFront(), 60);
+
+      const findAndClickReturn = (rootDoc) => {
+        if (!rootDoc) return false;
+        const selectors = [
+          '[data-tid="return-to-call-button"]',
+          '[data-tid="calling-header-return-button"]',
+          '[data-tid="calling-pip"]',
+          '[data-tid*="calling-mini"]',
+          '[data-tid*="pip-container"]',
+          '[aria-label*="Return to call" i]',
+          '[aria-label*="Back to call" i]',
+          '[aria-label*="Return to meeting" i]',
+          '[aria-label*="Tap to return" i]',
+          '[aria-label*="Maximize call" i]',
+          '[aria-label*="Resume call" i]'
+        ];
+        for (const sel of selectors) {
+          const el = rootDoc.querySelector(sel);
+          if (el) { el.click(); return true; }
+        }
+        // Fallback: match visible button text (New Teams v2 PIP / header bar)
+        const btns = rootDoc.querySelectorAll('button, [role="button"]');
+        for (const b of btns) {
+          const txt = (b.textContent || '').trim();
+          if (/^(return to call|back to call|return to meeting|tap to return)/i.test(txt)) {
+            b.click();
+            return true;
+          }
+        }
+        return false;
+      };
+
+      if (!findAndClickReturn(document)) {
+        const frames = document.querySelectorAll('iframe');
+        for (const fr of frames) {
+          try {
+            if (findAndClickReturn(fr.contentDocument)) break;
+          } catch (_) {}
+        }
+      }
     });
 
     // S5: Privacy Lock Overlay

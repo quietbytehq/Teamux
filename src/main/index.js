@@ -107,10 +107,17 @@ function sanitizeWindowBounds(bounds) {
 }
 
 function bringAllTeamuxWindowsToFront() {
+  // Show and restore mainWindow first, then focus child/meeting pop-out windows LAST so they stay on top
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    if (!mainWindow.isVisible()) mainWindow.show();
+    mainWindow.focus();
+  }
   allActiveWindows.forEach((win) => {
-    if (win && !win.isDestroyed()) {
+    if (win && !win.isDestroyed() && win !== mainWindow) {
       if (win.isMinimized()) win.restore();
       if (!win.isVisible()) win.show();
+      if (typeof win.moveTop === 'function') win.moveTop();
       win.focus();
     }
   });
