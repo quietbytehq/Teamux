@@ -1,0 +1,67 @@
+name: Build & Verify Windows Installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'GitHub Release tag to attach Windows installer & builds to'
+        required: false
+        default: 'v2.0.0'
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows NSIS Setup Installer, Portable, and Zip
+        run: npx electron-builder --win nsis portable zip
+
+      - name: Smoke test Teamux.exe on Windows
+        shell: pwsh
+        run: |
+          $exe = "dist\win-unpacked\Teamux.exe"
+          if (-not (Test-Path $exe)) { throw "Teamux.exe not found!" }
+          $proc = Start-Process -FilePath $exe -ArgumentList "--no-sandbox" -PassThru -RedirectStandardOutput "win-stdout.log" -RedirectStandardError "win-stderr.log"
+          Start-Sleep -Seconds 6
+          $alive = -not $proc.HasExited
+          Write-Host "Process alive after 6s: $alive"
+          if (-not $alive) {
+            Write-Host "ExitCode: $($proc.ExitCode)"
+            if (Test-Path "win-stdout.log") { Get-Content "win-stdout.log" }
+            if (Test-Path "win-stderr.log") { Get-Content "win-stderr.log" }
+            throw "Teamux.exe exited prematurely!"
+          }
+          Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          if (Test-Path "win-stdout.log") { Write-Host "--- STDOUT ---"; Get-Content "win-stdout.log" }
+          if (Test-Path "win-stderr.log") { Write-Host "--- STDERR ---"; Get-Content "win-stderr.log" }
+          Write-Host "Windows smoke test PASSED!"
+
+      - name: List built Windows artifacts
+        shell: pwsh
+        run: Get-ChildItem dist\*.exe, dist\*.zip | Select-Object Name, Length
+
+      - name: Upload Windows Installer & Builds to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.release_tag || github.ref_name }}
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem "dist\teamux-*-windows-*.exe", "dist\teamux-*-windows-*.zip"
+          gh release upload $env:TAG $files.FullName --clobber

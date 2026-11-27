@@ -44,6 +44,9 @@ linux:
 win:
   artifactName: "${name}-v${version}-windows-${arch}.${ext}"
   target:
+    - target: nsis
+      arch:
+        - x64
     - target: portable
       arch:
         - x64
@@ -51,6 +54,14 @@ win:
       arch:
         - x64
   icon: assets/icon.ico
+
+nsis:
+  artifactName: "${name}-v${version}-windows-setup-${arch}.${ext}"
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Teamux
 
 portable:
   artifactName: "${name}-v${version}-windows-portable-${arch}.${ext}"
