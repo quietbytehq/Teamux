@@ -1,4 +1,4 @@
-name: Build & Verify Windows Installer
+name: Build & Verify Windows Installers (MSI, NSIS, Portable, Zip)
 
 on:
   workflow_dispatch:
@@ -30,8 +30,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Windows NSIS Setup Installer, Portable, and Zip
-        run: npx electron-builder --win nsis portable zip
+      - name: Build Windows MSI, NSIS Setup, Portable, and Zip
+        run: npx electron-builder --win msi nsis portable zip
 
       - name: Smoke test Teamux.exe on Windows
         shell: pwsh
@@ -55,13 +55,22 @@ jobs:
 
       - name: List built Windows artifacts
         shell: pwsh
-        run: Get-ChildItem dist\*.exe, dist\*.zip | Select-Object Name, Length
+        run: Get-ChildItem dist\*.msi, dist\*.exe, dist\*.zip | Select-Object Name, Length
 
-      - name: Upload Windows Installer & Builds to GitHub Release
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installers
+          path: |
+            dist/*.msi
+            dist/*.exe
+            dist/*.zip
+
+      - name: Upload Windows MSI & Installers to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.event.inputs.release_tag || github.ref_name }}
         shell: pwsh
         run: |
-          $files = Get-ChildItem "dist\teamux-*-windows-*.exe", "dist\teamux-*-windows-*.zip"
+          $files = Get-ChildItem "dist\teamux-*-windows-*.msi", "dist\teamux-*-windows-*.exe", "dist\teamux-*-windows-*.zip"
           gh release upload $env:TAG $files.FullName --clobber

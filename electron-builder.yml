@@ -44,6 +44,9 @@ linux:
 win:
   artifactName: "${name}-v${version}-windows-${arch}.${ext}"
   target:
+    - target: msi
+      arch:
+        - x64
     - target: nsis
       arch:
         - x64
@@ -54,6 +57,12 @@ win:
       arch:
         - x64
   icon: assets/icon.ico
+
+msi:
+  artifactName: "${name}-v${version}-windows-${arch}.${ext}"
+  oneClick: false
+  perMachine: true
+  runAfterFinish: true
 
 nsis:
   artifactName: "${name}-v${version}-windows-setup-${arch}.${ext}"
