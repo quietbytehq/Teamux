@@ -107,14 +107,21 @@ function sanitizeWindowBounds(bounds) {
 }
 
 function bringAllTeamuxWindowsToFront() {
-  // Show and restore mainWindow first, then focus child/meeting pop-out windows LAST so they stay on top
+  // Focus browse pop-outs first, then mainWindow, then any Teams-spawned meeting pop-out LAST
+  allActiveWindows.forEach((win) => {
+    if (win && !win.isDestroyed() && win._isBrowsePopout) {
+      if (win.isMinimized()) win.restore();
+      if (!win.isVisible()) win.show();
+    }
+  });
   if (mainWindow && !mainWindow.isDestroyed()) {
     if (mainWindow.isMinimized()) mainWindow.restore();
     if (!mainWindow.isVisible()) mainWindow.show();
+    if (typeof mainWindow.moveTop === 'function') mainWindow.moveTop();
     mainWindow.focus();
   }
   allActiveWindows.forEach((win) => {
-    if (win && !win.isDestroyed() && win !== mainWindow) {
+    if (win && !win.isDestroyed() && win !== mainWindow && !win._isBrowsePopout) {
       if (win.isMinimized()) win.restore();
       if (!win.isVisible()) win.show();
       if (typeof win.moveTop === 'function') win.moveTop();
@@ -510,6 +517,41 @@ ipcMain.on('unread-badge-update', (_event, rawCount) => {
     }
     setTrayUnreadCount(count, mainWindow, openSettingsDialog, bringAllTeamuxWindowsToFront);
   }
+});
+
+// IPC: Open a separate browse window (for Calendar/Teams/Chat during an active call)
+ipcMain.on('open-popout-view', () => {
+  const activeProfile = store.get('activeProfile', 'default');
+  const partition = getProfilePartition(activeProfile);
+  const iconPath = path.join(__dirname, '../../assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
+  const teamsUrl = store.get('teamsUrl', 'https://teams.cloud.microsoft/');
+  const safeTeamsUrl = isTrustedOrigin(teamsUrl) ? teamsUrl : 'https://teams.cloud.microsoft/';
+
+  const popWin = new BrowserWindow({
+    title: 'Teamux - Calendar & Teams',
+    width: 1180,
+    height: 780,
+    minWidth: 720,
+    minHeight: 520,
+    icon: iconPath,
+    backgroundColor: '#1b1b1e',
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/teams-preload.js'),
+      partition,
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      spellcheck: !store.get('lowHardwareMode', false),
+      backgroundThrottling: true
+    }
+  });
+
+  popWin._isBrowsePopout = true;
+  allActiveWindows.add(popWin);
+  attachNavigationSecurity(popWin);
+  popWin.on('closed', () => allActiveWindows.delete(popWin));
+  popWin.loadURL(safeTeamsUrl);
 });
 
 // IPC: Bring all windows to front

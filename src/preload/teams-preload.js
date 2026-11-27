@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('teamuxBridge', {
     }
   },
   bringAllToFront: () => ipcRenderer.send('bring-all-to-front'),
+  openPopoutView: () => ipcRenderer.send('open-popout-view'),
   requestShowStudio: () => ipcRenderer.send('show-studio-request'),
   setCallActive: (isActive) => ipcRenderer.send('call-state-changed', Boolean(isActive)),
   onShowStudio: (cb) => {
@@ -1791,6 +1792,21 @@ function initTeamuxPageHook() {
     document.addEventListener('click', (e) => {
       const el = e.target;
       if (!el) return;
+
+      // If user is on the active meeting stage and clicks Calendar/Teams/Chat in the left rail,
+      // open a separate pop-out window so the meeting screen is never hidden or lost!
+      if (activeStreams.size > 0) {
+        const navItem = el.closest('[data-tid="app-bar"] button, [data-tid="app-bar"] a, nav[aria-label*="App bar" i] button, nav[aria-label*="App bar" i] a, [data-tid*="app-bar-item" i]');
+        const onMeetingStage = Boolean(document.querySelector('[data-tid*="hangup"], [aria-label*="Leave" i], #hangup-button'));
+        if (navItem && onMeetingStage) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          window.teamuxBridge?.openPopoutView();
+          return;
+        }
+      }
+
       if (el.closest('[data-tid*="hangup"], [data-tid*="call-end"], [aria-label*="Leave"], [aria-label*="Hang up"], #hangup-button')) {
         setTimeout(stopAllStreams, 150);
       }
