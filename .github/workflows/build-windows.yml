@@ -30,8 +30,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Windows MSI, NSIS Setup, Portable, and Zip
-        run: npx electron-builder --win msi nsis portable zip
+      - name: Build Windows NSIS Setup, Portable, and Zip
+        run: npx electron-builder --win nsis portable zip --publish never
 
       - name: Smoke test Teamux.exe on Windows
         shell: pwsh
