@@ -1152,6 +1152,10 @@ function initTeamuxPageHook() {
     paneRetouch.appendChild(createToggleRow('Portrait Focus (Vignette)', 'teamux-toggle-vignette', studioState.vignetteEnabled));
     paneRetouch.appendChild(createToggleRow('Mirror Camera (Flip)', 'teamux-toggle-mirror', studioState.mirrorCamera));
     paneRetouch.appendChild(createToggleRow('Be Right Back Screen (Ctrl+Shift+V)', 'teamux-toggle-away', studioState.awaySlateActive));
+    const brbHint = document.createElement('div');
+    brbHint.style.cssText = 'font-size:10px; color:#94a3b8; margin-top:-4px;';
+    brbHint.textContent = '💡 Tip: Turn off Teams Background Blur so BRB text stays crisp.';
+    paneRetouch.appendChild(brbHint);
 
     const micDivider = document.createElement('div');
     micDivider.className = 'teamux-divider';
@@ -1354,20 +1358,22 @@ function initTeamuxPageHook() {
           '[data-tid="return-to-call-button"]',
           '[data-tid="calling-header-return-button"]',
           '[data-tid="calling-pip"]',
-          '[data-tid*="calling-mini"]',
-          '[data-tid*="pip-container"]',
+          '[data-tid*="calling-pip" i]',
+          '[data-tid*="calling-mini" i]',
+          '[data-tid*="pip-container" i]',
+          '[data-tid*="call-status" i]',
           '[aria-label*="Return to call" i]',
           '[aria-label*="Back to call" i]',
           '[aria-label*="Return to meeting" i]',
           '[aria-label*="Tap to return" i]',
           '[aria-label*="Maximize call" i]',
-          '[aria-label*="Resume call" i]'
+          '[aria-label*="Resume call" i]',
+          '[aria-label*="Ongoing call" i]'
         ];
         for (const sel of selectors) {
           const el = rootDoc.querySelector(sel);
           if (el) { el.click(); return true; }
         }
-        // Fallback: match visible button text (New Teams v2 PIP / header bar)
         const btns = rootDoc.querySelectorAll('button, [role="button"]');
         for (const b of btns) {
           const txt = (b.textContent || '').trim();
@@ -1379,13 +1385,22 @@ function initTeamuxPageHook() {
         return false;
       };
 
-      if (!findAndClickReturn(document)) {
+      let foundBtn = findAndClickReturn(document);
+      if (!foundBtn) {
         const frames = document.querySelectorAll('iframe');
         for (const fr of frames) {
           try {
-            if (findAndClickReturn(fr.contentDocument)) break;
+            if (findAndClickReturn(fr.contentDocument)) {
+              foundBtn = true;
+              break;
+            }
           } catch (_) {}
         }
+      }
+
+      // Fallback for New Teams v2 SPA when navigating to Calendar/Chat hides the PIP completely
+      if (!foundBtn && window.history.length > 1) {
+        window.history.back();
       }
     });
 
