@@ -1789,24 +1789,34 @@ function initTeamuxPageHook() {
       }
     });
 
+    // Intercept pointerdown, mousedown, and click on the left App Bar rail during an active call
+    // so React cannot navigate the meeting window away to Calendar/Teams/Chat.
+    const handleNavIntercept = (e) => {
+      if (activeStreams.size === 0) return;
+      if (e.clientX > 76 || e.clientY < 45) return;
+      const el = e.target;
+      if (!el || !el.closest) return;
+      // Ignore our own Studio widget or Call Banner if somehow in that area
+      if (el.closest('#teamux-studio-widget, #teamux-call-banner')) return;
+
+      const clickable = el.closest('button, a, [role="button"], [role="tab"], [role="menuitem"], [tabindex]');
+      if (!clickable) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      if (e.type === 'click') {
+        window.teamuxBridge?.openPopoutView();
+      }
+    };
+
+    document.addEventListener('pointerdown', handleNavIntercept, true);
+    document.addEventListener('mousedown', handleNavIntercept, true);
     document.addEventListener('click', (e) => {
+      handleNavIntercept(e);
+      if (e.defaultPrevented) return;
       const el = e.target;
       if (!el) return;
-
-      // If user is on the active meeting stage and clicks Calendar/Teams/Chat in the left rail,
-      // open a separate pop-out window so the meeting screen is never hidden or lost!
-      if (activeStreams.size > 0) {
-        const navItem = el.closest('[data-tid="app-bar"] button, [data-tid="app-bar"] a, nav[aria-label*="App bar" i] button, nav[aria-label*="App bar" i] a, [data-tid*="app-bar-item" i]');
-        const onMeetingStage = Boolean(document.querySelector('[data-tid*="hangup"], [aria-label*="Leave" i], #hangup-button'));
-        if (navItem && onMeetingStage) {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          window.teamuxBridge?.openPopoutView();
-          return;
-        }
-      }
-
       if (el.closest('[data-tid*="hangup"], [data-tid*="call-end"], [aria-label*="Leave"], [aria-label*="Hang up"], #hangup-button')) {
         setTimeout(stopAllStreams, 150);
       }
