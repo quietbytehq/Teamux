@@ -1,5 +1,5 @@
 // src/main/index.js
-// Main process entry point for Teamux v2.0.0
+// Main process entry point for Teamux v2.1.0
 
 const { app, BrowserWindow, session, ipcMain, shell, screen, dialog } = require('electron');
 const path = require('path');
@@ -35,8 +35,11 @@ configureAppFlags(store);
 
 let mainWindow = null;
 let settingsWindow = null;
+let browsePopoutWindow = null;
+let pendingPopoutTarget = null;
 const allActiveWindows = new Set();
 const configuredSessions = new Set();
+const activeCallFramesByWc = new Map();
 app.isQuitting = false;
 
 const ALLOWED_EXTERNAL_PROTOCOLS = new Set(['https:', 'http:', 'mailto:']);
@@ -519,16 +522,43 @@ ipcMain.on('unread-badge-update', (_event, rawCount) => {
   }
 });
 
-// IPC: Open a separate browse window (for Calendar/Teams/Chat during an active call)
-ipcMain.on('open-popout-view', () => {
+function sanitizePopoutTarget(rawTarget) {
+  if (!rawTarget || typeof rawTarget !== 'object') return null;
+  const cleanStr = (val) => (typeof val === 'string' ? val.trim().slice(0, 80) : '');
+  const label = cleanStr(rawTarget.label);
+  const dataTid = cleanStr(rawTarget.dataTid);
+  const ariaLabel = cleanStr(rawTarget.ariaLabel);
+  if (!label && !dataTid && !ariaLabel) return null;
+  return { label, dataTid, ariaLabel };
+}
+
+// IPC: Open or reuse a separate browse window (for Calendar/Teams/Chat during an active call)
+ipcMain.on('open-popout-view', (_event, rawTarget) => {
+  const target = sanitizePopoutTarget(rawTarget);
+  pendingPopoutTarget = target;
+
+  if (browsePopoutWindow && !browsePopoutWindow.isDestroyed()) {
+    if (browsePopoutWindow.isMinimized()) browsePopoutWindow.restore();
+    if (!browsePopoutWindow.isVisible()) browsePopoutWindow.show();
+    if (typeof browsePopoutWindow.moveTop === 'function') browsePopoutWindow.moveTop();
+    browsePopoutWindow.focus();
+    if (target) {
+      browsePopoutWindow.webContents.send('popout-navigate-target', target);
+    }
+    return;
+  }
+
   const activeProfile = store.get('activeProfile', 'default');
   const partition = getProfilePartition(activeProfile);
+  const targetSession = partition ? session.fromPartition(partition) : session.defaultSession;
+  ensureSessionConfigured(targetSession);
+
   const iconPath = path.join(__dirname, '../../assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
   const teamsUrl = store.get('teamsUrl', 'https://teams.cloud.microsoft/');
   const safeTeamsUrl = isTrustedOrigin(teamsUrl) ? teamsUrl : 'https://teams.cloud.microsoft/';
 
-  const popWin = new BrowserWindow({
-    title: 'Teamux - Calendar & Teams',
+  browsePopoutWindow = new BrowserWindow({
+    title: target && target.label ? `Teamux - ${target.label}` : 'Teamux - Calendar & Teams',
     width: 1180,
     height: 780,
     minWidth: 720,
@@ -547,11 +577,43 @@ ipcMain.on('open-popout-view', () => {
     }
   });
 
-  popWin._isBrowsePopout = true;
-  allActiveWindows.add(popWin);
-  attachNavigationSecurity(popWin);
-  popWin.on('closed', () => allActiveWindows.delete(popWin));
-  popWin.loadURL(safeTeamsUrl);
+  browsePopoutWindow._isBrowsePopout = true;
+  allActiveWindows.add(browsePopoutWindow);
+  attachNavigationSecurity(browsePopoutWindow);
+
+  browsePopoutWindow.webContents.on('did-create-window', (childWindow) => {
+    childWindow.setIcon(iconPath);
+    childWindow.setMinimumSize(640, 480);
+    allActiveWindows.add(childWindow);
+    attachNavigationSecurity(childWindow);
+    childWindow.on('closed', () => allActiveWindows.delete(childWindow));
+  });
+
+  const currentPop = browsePopoutWindow;
+  currentPop.on('closed', () => {
+    allActiveWindows.delete(currentPop);
+    if (browsePopoutWindow === currentPop) {
+      browsePopoutWindow = null;
+      pendingPopoutTarget = null;
+    }
+  });
+  currentPop.loadURL(safeTeamsUrl);
+});
+
+ipcMain.handle('get-window-role', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const isBrowsePopout = Boolean(win && win._isBrowsePopout);
+  return {
+    isBrowsePopout,
+    target: isBrowsePopout ? pendingPopoutTarget : null
+  };
+});
+
+ipcMain.on('popout-target-applied', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win && win._isBrowsePopout) {
+    pendingPopoutTarget = null;
+  }
 });
 
 // IPC: Bring all windows to front
@@ -566,11 +628,34 @@ ipcMain.on('show-studio-request', () => {
   }
 });
 
-// IPC: Dynamic backgroundThrottling based on active WebRTC call
-ipcMain.on('call-state-changed', (_event, isActive) => {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.setBackgroundThrottling(!Boolean(isActive));
+// IPC: Dynamic backgroundThrottling and cross-frame active call sync
+ipcMain.on('call-state-changed', (event, isActive) => {
+  const wc = event && event.sender;
+  if (!wc || wc.isDestroyed()) return;
+
+  const wcId = wc.id;
+  const frameKey = String(
+    event.senderFrame && typeof event.senderFrame.frameTreeNodeId !== 'undefined'
+      ? event.senderFrame.frameTreeNodeId
+      : (typeof event.frameId !== 'undefined' ? event.frameId : 0)
+  );
+
+  let frameSet = activeCallFramesByWc.get(wcId);
+  if (!frameSet) {
+    frameSet = new Set();
+    activeCallFramesByWc.set(wcId, frameSet);
+    wc.once('destroyed', () => activeCallFramesByWc.delete(wcId));
   }
+
+  if (Boolean(isActive)) {
+    frameSet.add(frameKey);
+  } else {
+    frameSet.delete(frameKey);
+  }
+
+  const hasActiveCall = frameSet.size > 0;
+  wc.setBackgroundThrottling(!hasActiveCall);
+  wc.send('call-state-sync', hasActiveCall);
 });
 
 // IPC: Reset window position

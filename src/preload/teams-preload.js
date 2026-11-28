@@ -11,9 +11,28 @@ contextBridge.exposeInMainWorld('teamuxBridge', {
     }
   },
   bringAllToFront: () => ipcRenderer.send('bring-all-to-front'),
-  openPopoutView: () => ipcRenderer.send('open-popout-view'),
+  openPopoutView: (target) => {
+    if (target && typeof target === 'object') {
+      const clean = (val) => (typeof val === 'string' ? val.trim().slice(0, 80) : '');
+      ipcRenderer.send('open-popout-view', {
+        label: clean(target.label),
+        dataTid: clean(target.dataTid),
+        ariaLabel: clean(target.ariaLabel)
+      });
+    } else {
+      ipcRenderer.send('open-popout-view');
+    }
+  },
+  getWindowRole: () => ipcRenderer.invoke('get-window-role'),
+  markPopoutTargetApplied: () => ipcRenderer.send('popout-target-applied'),
   requestShowStudio: () => ipcRenderer.send('show-studio-request'),
   setCallActive: (isActive) => ipcRenderer.send('call-state-changed', Boolean(isActive)),
+  onCallStateSync: (cb) => {
+    if (typeof cb === 'function') ipcRenderer.on('call-state-sync', (_ev, active) => cb(Boolean(active)));
+  },
+  onPopoutNavigateTarget: (cb) => {
+    if (typeof cb === 'function') ipcRenderer.on('popout-navigate-target', (_ev, target) => cb(target));
+  },
   onShowStudio: (cb) => {
     if (typeof cb === 'function') ipcRenderer.on('show-studio', () => cb());
   },
@@ -42,28 +61,42 @@ function initTeamuxPageHook() {
     loudRingAlert: false
   };
 
+  const safeLsGet = (key, fallback = null) => {
+    try {
+      const val = localStorage.getItem(key);
+      return val === null ? fallback : val;
+    } catch (_) {
+      return fallback;
+    }
+  };
+  const safeLsSet = (key, value) => {
+    try {
+      localStorage.setItem(key, String(value));
+    } catch (_) {}
+  };
+
   // -------------------------------------------------------------
   // 1. Studio Camera, Audio & Away Slate State
   // -------------------------------------------------------------
   const studioState = {
-    beautyEnabled: localStorage.getItem('teamux_beauty_enabled') !== 'false',
-    beautyLevel: parseInt(localStorage.getItem('teamux_beauty_level') || '65', 10),
-    studioLightEnabled: localStorage.getItem('teamux_light_enabled') !== 'false',
-    vignetteEnabled: localStorage.getItem('teamux_vignette_enabled') === 'true',
-    mirrorCamera: localStorage.getItem('teamux_mirror_camera') === 'true',
+    beautyEnabled: safeLsGet('teamux_beauty_enabled') !== 'false',
+    beautyLevel: parseInt(safeLsGet('teamux_beauty_level', '65'), 10),
+    studioLightEnabled: safeLsGet('teamux_light_enabled') !== 'false',
+    vignetteEnabled: safeLsGet('teamux_vignette_enabled') === 'true',
+    mirrorCamera: safeLsGet('teamux_mirror_camera') === 'true',
     awaySlateActive: false,
 
-    grayscaleEnabled: localStorage.getItem('teamux_grayscale_enabled') === 'true',
-    contrast: parseInt(localStorage.getItem('teamux_contrast') || '100', 10),
-    saturation: parseInt(localStorage.getItem('teamux_saturation') || '100', 10),
-    shadows: parseInt(localStorage.getItem('teamux_shadows') || '0', 10),
-    ambience: parseInt(localStorage.getItem('teamux_ambience') || '0', 10),
+    grayscaleEnabled: safeLsGet('teamux_grayscale_enabled') === 'true',
+    contrast: parseInt(safeLsGet('teamux_contrast', '100'), 10),
+    saturation: parseInt(safeLsGet('teamux_saturation', '100'), 10),
+    shadows: parseInt(safeLsGet('teamux_shadows', '0'), 10),
+    ambience: parseInt(safeLsGet('teamux_ambience', '0'), 10),
 
-    noiseGateEnabled: localStorage.getItem('teamux_noise_gate') === 'true',
-    pushToTalkEnabled: localStorage.getItem('teamux_ptt') === 'true',
+    noiseGateEnabled: safeLsGet('teamux_noise_gate') === 'true',
+    pushToTalkEnabled: safeLsGet('teamux_ptt') === 'true',
     pttActive: false,
 
-    activeTab: localStorage.getItem('teamux_active_tab') || 'retouch',
+    activeTab: safeLsGet('teamux_active_tab', 'retouch'),
     isComparing: false,
     activeVideoStream: null
   };
@@ -184,7 +217,7 @@ function initTeamuxPageHook() {
     }
   };
 
-  let currentTheme = localStorage.getItem('teamux_theme') || 'default';
+  let currentTheme = safeLsGet('teamux_theme', 'default');
 
   function generateThemeCSS(themeKey) {
     const theme = THEMES[themeKey];
@@ -251,6 +284,82 @@ function initTeamuxPageHook() {
   const activeStreams = new Set();
   let currentCameraContext = null;
   let currentAudioContextCtrl = null;
+  let syncedRemoteCallActive = false;
+  let lastReportedLocalCall = null;
+  let isBrowsePopoutWindow = false;
+  let popoutNavTimer = null;
+
+  function collectAllRoots(root, out = []) {
+    if (!root) return out;
+    out.push(root);
+    try {
+      const all = root.querySelectorAll('*');
+      for (const el of all) {
+        if (el.shadowRoot) collectAllRoots(el.shadowRoot, out);
+      }
+    } catch (_) {}
+    return out;
+  }
+
+  function hasLivePeerConnection() {
+    for (const pc of networkState.activePeerConnections) {
+      if (
+        pc &&
+        (pc.connectionState === 'connected' ||
+         pc.connectionState === 'connecting' ||
+         pc.iceConnectionState === 'connected' ||
+         pc.iceConnectionState === 'completed')
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  const ACTIVE_CALL_DOM_SELECTOR = [
+    '#hangup-button',
+    '[data-tid="hangup-button"]',
+    '[data-tid*="hangup" i]',
+    '[data-tid="call-duration"]',
+    '[data-tid="calling-header"]',
+    '[data-tid="calling-screen"]',
+    'button[aria-label="Leave" i]',
+    'button[aria-label*="Leave call" i]',
+    'button[aria-label*="Hang up" i]'
+  ].join(', ');
+
+  function hasActiveCallDOM() {
+    if (!isTopFrame || typeof document === 'undefined' || !document.body) return false;
+    const checkDoc = (doc) => {
+      if (!doc) return false;
+      const roots = collectAllRoots(doc);
+      for (const root of roots) {
+        try {
+          const matches = root.querySelectorAll(ACTIVE_CALL_DOM_SELECTOR);
+          for (const el of matches) {
+            if (el.getClientRects && el.getClientRects().length > 0) return true;
+          }
+        } catch (_) {}
+      }
+      return false;
+    };
+    if (checkDoc(document)) return true;
+    const frames = document.querySelectorAll('iframe');
+    for (const fr of frames) {
+      try {
+        if (checkDoc(fr.contentDocument)) return true;
+      } catch (_) {}
+    }
+    return false;
+  }
+
+  function isLocalCallActive() {
+    return activeStreams.size > 0 || hasLivePeerConnection() || hasActiveCallDOM();
+  }
+
+  function isCallInProgress() {
+    return !isBrowsePopoutWindow && (syncedRemoteCallActive || isLocalCallActive());
+  }
 
   function registerStream(stream) {
     if (!stream) return stream;
@@ -300,9 +409,9 @@ function initTeamuxPageHook() {
   };
 
   const networkState = {
-    guardianEnabled: localStorage.getItem('teamux_guardian_enabled') !== 'false',
-    bandwidthMode: localStorage.getItem('teamux_bandwidth_mode') || 'auto',
-    meteredMode: localStorage.getItem('teamux_metered_mode') === 'true',
+    guardianEnabled: safeLsGet('teamux_guardian_enabled') !== 'false',
+    bandwidthMode: safeLsGet('teamux_bandwidth_mode', 'auto'),
+    meteredMode: safeLsGet('teamux_metered_mode') === 'true',
     currentTier: '720p',
     currentRtt: 0,
     currentLoss: 0,
@@ -348,6 +457,10 @@ function initTeamuxPageHook() {
           networkState.activePeerConnections.delete(pc);
           stopTelemetryIfIdle();
         }
+        updateActiveCallBanner();
+      });
+      pc.addEventListener('iceconnectionstatechange', () => {
+        updateActiveCallBanner();
       });
 
       const origAddTrack = pc.addTrack.bind(pc);
@@ -653,11 +766,11 @@ function initTeamuxPageHook() {
 
       const scheduleSlateKeepAlive = () => {
         if (!isRunning || slateKeepAliveTimer !== null) return;
-        // 4 FPS gentle keep-alive prevents Teams WebRTC from marking the camera as disabled/starved
+        // ~8 FPS smooth keep-alive prevents Teams WebRTC from marking the camera as disabled/starved
         slateKeepAliveTimer = setTimeout(() => {
           slateKeepAliveTimer = null;
           if (isRunning) processFrame();
-        }, 250);
+        }, 125);
       };
 
       const cleanup = () => {
@@ -708,17 +821,24 @@ function initTeamuxPageHook() {
       const drawAudioFirstSlate = () => {
         const w = canvas.width;
         const h = canvas.height;
+        const pulse = 0.55 + 0.45 * Math.sin(performance.now() / 400);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.filter = 'none';
         ctx.globalAlpha = 1.0;
         ctx.globalCompositeOperation = 'source-over';
         ctx.fillStyle = '#0f172a';
         ctx.fillRect(0, 0, w, h);
 
+        ctx.fillStyle = `rgba(239, 68, 68, ${pulse.toFixed(2)})`;
+        ctx.beginPath();
+        ctx.arc(w / 2 - 142, h / 2 - 21, 6, 0, Math.PI * 2);
+        ctx.fill();
+
         ctx.fillStyle = '#ef4444';
         ctx.font = 'bold 22px "Segoe UI", system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('🔴 Audio-First Mode Active', w / 2, h / 2 - 20);
+        ctx.fillText('Audio-First Mode Active', w / 2 + 8, h / 2 - 20);
 
         ctx.fillStyle = '#94a3b8';
         ctx.font = '14px "Segoe UI", system-ui, sans-serif';
@@ -730,6 +850,7 @@ function initTeamuxPageHook() {
         const w = canvas.width;
         const h = canvas.height;
         const t = performance.now() / 1000;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.filter = 'none';
         ctx.globalAlpha = 1.0;
         ctx.globalCompositeOperation = 'source-over';
@@ -800,14 +921,19 @@ function initTeamuxPageHook() {
         ctx.fillStyle = '#e2e8f0';
         ctx.fillText("I'll be back in the meeting shortly — thank you!", w / 2, cardY + cardH * 0.67);
 
-        // Animated pulsing dots + audio connected status
+        // Continuous gentle pulsing dots + glow keep canvas pixels updating ~8 FPS so WebRTC stays active
         const activeDot = Math.floor(t * 2.5) % 3;
+        const pulse = 0.55 + 0.45 * Math.sin(t * 4.0);
         const dotColors = ['#38bdf8', '#c084fc', '#f472b6'];
         for (let i = 0; i < 3; i++) {
           ctx.beginPath();
-          ctx.arc(w / 2 - 18 + i * 18, cardY + cardH * 0.84, i === activeDot ? 5.5 : 3.5, 0, Math.PI * 2);
+          const radiusDot = i === activeDot ? 4.5 + pulse * 1.5 : 3.5;
+          ctx.arc(w / 2 - 18 + i * 18, cardY + cardH * 0.84, radiusDot, 0, Math.PI * 2);
           ctx.fillStyle = i === activeDot ? dotColors[i] : 'rgba(148, 163, 184, 0.45)';
           ctx.fill();
+        }
+        if (video.paused && rawVideoTrack.readyState === 'live') {
+          video.play().catch(() => {});
         }
       };
 
@@ -815,7 +941,7 @@ function initTeamuxPageHook() {
         frameHandle = null;
         if (!isRunning) return;
 
-        // Keep-alive 4 FPS frames during Audio-First or Be Right Back so Teams never flags camera as disabled
+        // Keep-alive ~8 FPS frames during Audio-First or Be Right Back so Teams never flags camera as disabled
         if (networkState.currentTier === 'audio-only') {
           drawAudioFirstSlate();
           scheduleSlateKeepAlive();
@@ -1664,9 +1790,14 @@ function initTeamuxPageHook() {
   }
 
   function updateActiveCallBanner() {
+    const localActive = isLocalCallActive();
+    if (localActive !== lastReportedLocalCall) {
+      lastReportedLocalCall = localActive;
+      window.teamuxBridge?.setCallActive(localActive);
+    }
+
     if (!isTopFrame) return;
-    const isCallActive = activeStreams.size > 0;
-    window.teamuxBridge?.setCallActive(isCallActive);
+    const isCallActive = isCallInProgress();
 
     const banner = document.getElementById('teamux-call-banner');
     if (!banner) return;
@@ -1729,6 +1860,125 @@ function initTeamuxPageHook() {
   window.teamuxBridge?.onConfigUpdated(applyRuntimeConfig);
   window.teamuxBridge?.onShowStudio(showStudioWidget);
   window.teamuxBridge?.onTogglePrivacyLock(togglePrivacyLockUI);
+  window.teamuxBridge?.onCallStateSync((active) => {
+    syncedRemoteCallActive = Boolean(active);
+    updateActiveCallBanner();
+  });
+
+  function showPopoutToast(labelText) {
+    if (!isTopFrame || !document.body) return;
+    let toast = document.getElementById('teamux-popout-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'teamux-popout-toast';
+      toast.style.cssText = [
+        'position:fixed',
+        'top:58px',
+        'left:50%',
+        'transform:translateX(-50%)',
+        'z-index:2147483647',
+        'background:rgba(15,23,42,0.95)',
+        'color:#f8fafc',
+        'border:1px solid #38bdf8',
+        'border-radius:24px',
+        'padding:7px 16px',
+        'font-size:12.5px',
+        'font-weight:600',
+        'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif',
+        'box-shadow:0 8px 24px rgba(0,0,0,0.55)',
+        'pointer-events:none',
+        'transition:opacity 0.25s ease'
+      ].join(';');
+      document.body.appendChild(toast);
+    }
+    const clean = labelText && labelText.length > 0 ? labelText : 'View';
+    toast.textContent = `🪟 Opened ${clean} in separate window — your meeting stays active here`;
+    toast.style.opacity = '1';
+    toast.style.display = 'block';
+    clearTimeout(toast._hideTimer);
+    toast._hideTimer = setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => { toast.style.display = 'none'; }, 250);
+    }, 3000);
+  }
+
+  function findMatchingPopoutNavItem(target) {
+    if (!target) return null;
+    const roots = collectAllRoots(document);
+    const wantTid = (target.dataTid || '').trim();
+    const wantLabel = (target.label || target.ariaLabel || '').trim().toLowerCase();
+
+    if (wantTid) {
+      for (const root of roots) {
+        try {
+          const el = root.querySelector(`[data-tid="${CSS.escape(wantTid)}"]`);
+          if (el && el.getClientRects && el.getClientRects().length > 0) return el;
+        } catch (_) {}
+      }
+    }
+
+    if (!wantLabel) return null;
+    const candidateSelector = '[data-tid*="app-bar" i] button, [data-tid*="app-bar" i] a, [data-tid*="app-bar" i] [role="tab"], [data-tid*="app-bar" i] [role^="menuitem"], [data-tid^="app-bar-"], nav[aria-label*="App bar" i] button, nav[aria-label*="App bar" i] [role="tab"], button, [role="tab"], [role^="menuitem"], a';
+    for (const root of roots) {
+      let candidates = [];
+      try {
+        candidates = root.querySelectorAll(candidateSelector);
+      } catch (_) {}
+      for (const el of candidates) {
+        if (!el.getClientRects || el.getClientRects().length === 0) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.left > 140) continue;
+        const aria = (el.getAttribute('aria-label') || '').split(',')[0].trim().toLowerCase();
+        const title = (el.getAttribute('title') || '').split(',')[0].trim().toLowerCase();
+        const text = (el.textContent || '').trim().split(/\r?\n/)[0].trim().toLowerCase();
+        if (aria === wantLabel || title === wantLabel || text === wantLabel) {
+          return el;
+        }
+      }
+    }
+    return null;
+  }
+
+  function navigatePopoutToTarget(target) {
+    if (!isTopFrame || !target) return;
+    if (popoutNavTimer) {
+      clearInterval(popoutNavTimer);
+      popoutNavTimer = null;
+    }
+
+    const tryClickTarget = () => {
+      const match = findMatchingPopoutNavItem(target);
+      if (!match) return false;
+      match.click();
+      window.teamuxBridge?.markPopoutTargetApplied();
+      return true;
+    };
+
+    if (tryClickTarget()) return;
+
+    let attempts = 0;
+    popoutNavTimer = setInterval(() => {
+      attempts++;
+      if (tryClickTarget() || attempts >= 50) {
+        clearInterval(popoutNavTimer);
+        popoutNavTimer = null;
+      }
+    }, 350);
+  }
+
+  if (isTopFrame) {
+    window.teamuxBridge?.getWindowRole().then((role) => {
+      if (role && role.isBrowsePopout) {
+        isBrowsePopoutWindow = true;
+        updateActiveCallBanner();
+        if (role.target) navigatePopoutToTarget(role.target);
+      }
+    }).catch(() => {});
+
+    window.teamuxBridge?.onPopoutNavigateTarget((target) => {
+      if (target) navigatePopoutToTarget(target);
+    });
+  }
 
   let lastCount = 0;
   function checkTitleForBadges(title) {
@@ -1741,25 +1991,175 @@ function initTeamuxPageHook() {
     }
   }
 
-  window.addEventListener('DOMContentLoaded', () => {
+  // Intercept left App Bar clicks in window capture phase during an active call
+  // so React/Fluent UI cannot navigate the meeting window away to Calendar/Teams/Chat.
+  if (isTopFrame) {
+    const EXCLUDED_TEAMUX_SEL = '#teamux-studio-widget, #teamux-call-banner, #teamux-privacy-lock, #teamux-popout-toast';
+    const EXCLUDED_CALL_CTRL_SEL = '[data-tid*="hangup" i], #hangup-button, [data-tid*="calling-toolbar" i], [data-tid*="calling-controls" i], [data-tid*="control-bar" i], [data-tid*="call-controls" i], [data-tid*="microphone" i], [data-tid*="camera" i], [data-tid*="share" i], [data-tid*="roster" i], [data-tid*="participant" i], [data-tid*="reaction" i], [data-tid*="raise" i], [data-tid*="meeting-chat" i], [aria-label*="Leave call" i], [aria-label*="Hang up" i]';
+    const APP_BAR_CONTAINER_SEL = '[data-tid="app-bar"], [data-tid="app-bar-items"], [data-tid="app-bar-wrapper"], [data-tid*="app-bar" i], nav[aria-label*="App bar" i], nav[aria-label*="Primary" i], [class*="app-bar" i], [id*="app-bar" i]';
+    const CLICKABLE_NAV_SEL = 'button, a, [role="button"], [role="tab"], [role^="menuitem"], [role="treeitem"], [role="option"], [role="link"], [data-tid^="app-bar-"], [tabindex]';
+    const TEAMS_KEY_SHORTCUTS = { '1': 'Activity', '2': 'Chat', '3': 'Teams', '4': 'Calendar', '5': 'Calls', '6': 'OneDrive' };
+
+    const getEventPath = (e) => {
+      if (e && typeof e.composedPath === 'function') {
+        const p = e.composedPath();
+        if (p && p.length > 0) return p;
+      }
+      const out = [];
+      let cur = e ? e.target : null;
+      while (cur) {
+        out.push(cur);
+        cur = cur.parentNode || cur.host || null;
+      }
+      return out;
+    };
+
+    const findSidebarNavTarget = (e) => {
+      if (isBrowsePopoutWindow || !isCallInProgress()) return null;
+      const path = getEventPath(e);
+      if (path.length === 0) return null;
+
+      let navContainer = null;
+      let clickableEl = null;
+
+      for (const node of path) {
+        if (!node || node.nodeType !== 1 || typeof node.matches !== 'function') continue;
+        if (node.matches(EXCLUDED_TEAMUX_SEL) || node.matches(EXCLUDED_CALL_CTRL_SEL)) {
+          return null;
+        }
+        if (!clickableEl && node.matches(CLICKABLE_NAV_SEL)) {
+          clickableEl = node;
+        }
+        if (!navContainer) {
+          if (node.matches(APP_BAR_CONTAINER_SEL)) {
+            navContainer = node;
+          } else if (node.matches('nav, [role="navigation"], [role="tablist"], [role="menubar"], aside')) {
+            try {
+              const r = node.getBoundingClientRect();
+              if (r.left <= 36 && r.width >= 30 && r.width <= 135 && r.height >= 150) {
+                navContainer = node;
+              }
+            } catch (_) {}
+          }
+        }
+      }
+
+      if (!clickableEl) return null;
+
+      let inLeftRail = Boolean(navContainer);
+      if (!inLeftRail) {
+        try {
+          const rect = clickableEl.getBoundingClientRect();
+          if (rect.left <= 96 && rect.right <= 130 && rect.top >= 32 && rect.height >= 20 && rect.height <= 96) {
+            inLeftRail = true;
+          }
+        } catch (_) {}
+      }
+      if (!inLeftRail) return null;
+
+      const aria = (clickableEl.getAttribute('aria-label') || '').trim();
+      const titleAttr = (clickableEl.getAttribute('title') || '').trim();
+      const tid = (clickableEl.getAttribute('data-tid') || '').trim();
+      const text = (clickableEl.textContent || '').trim().split(/\r?\n/)[0].trim();
+      const cleanLabel = (aria || titleAttr || text).split(',')[0].trim().slice(0, 60);
+
+      return {
+        label: cleanLabel,
+        dataTid: tid,
+        ariaLabel: aria
+      };
+    };
+
+    let lastPopoutTriggerTime = 0;
+    let lastPopoutTriggerKey = '';
+    let pendingPopoutFallbackTimer = null;
+
+    const triggerPopoutForTarget = (targetInfo) => {
+      const now = Date.now();
+      const targetKey = `${targetInfo?.label || ''}|${targetInfo?.dataTid || ''}`;
+      if (targetKey === lastPopoutTriggerKey && now - lastPopoutTriggerTime < 280) return;
+      if (now - lastPopoutTriggerTime < 120) return;
+      lastPopoutTriggerTime = now;
+      lastPopoutTriggerKey = targetKey;
+      if (pendingPopoutFallbackTimer) {
+        clearTimeout(pendingPopoutFallbackTimer);
+        pendingPopoutFallbackTimer = null;
+      }
+      window.teamuxBridge?.openPopoutView(targetInfo);
+      showPopoutToast(targetInfo && targetInfo.label ? targetInfo.label : 'View');
+    };
+
+    const handleWindowNavIntercept = (e) => {
+      const targetInfo = findSidebarNavTarget(e);
+      if (!targetInfo) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === 'function') {
+        e.stopImmediatePropagation();
+      }
+
+      if (e.type === 'click' || e.type === 'auxclick') {
+        triggerPopoutForTarget(targetInfo);
+      } else if (e.type === 'pointerup' || e.type === 'mouseup') {
+        if (!pendingPopoutFallbackTimer) {
+          pendingPopoutFallbackTimer = setTimeout(() => {
+            pendingPopoutFallbackTimer = null;
+            triggerPopoutForTarget(targetInfo);
+          }, 70);
+        }
+      }
+    };
+
+    ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click', 'auxclick'].forEach((evtName) => {
+      window.addEventListener(evtName, handleWindowNavIntercept, true);
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (isBrowsePopoutWindow || !isCallInProgress()) return;
+
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && TEAMS_KEY_SHORTCUTS[e.key]) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+        const label = TEAMS_KEY_SHORTCUTS[e.key];
+        triggerPopoutForTarget({ label, dataTid: '', ariaLabel: label });
+        return;
+      }
+
+      if ((e.key === 'Enter' || e.key === ' ') && document.activeElement) {
+        const targetInfo = findSidebarNavTarget({ target: document.activeElement });
+        if (targetInfo) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+          triggerPopoutForTarget(targetInfo);
+        }
+      }
+    }, true);
+  }
+
+  const initTopFrameOnDomReady = () => {
     if (!isTopFrame) return;
 
     const style = document.createElement('style');
     style.id = 'teamux-custom-styles';
     style.textContent = '[data-tid="download-desktop-app-banner"],[data-tid="app-download-banner"],.download-desktop-banner,.use-desktop-app-bar{display:none!important;}';
-    document.head.appendChild(style);
+    (document.head || document.documentElement).appendChild(style);
 
     applyTheme(currentTheme);
     injectStudioUI();
+    updateActiveCallBanner();
 
-    // Watchdog for SPA navigation (lightweight)
+    // Watchdog for SPA navigation & cross-frame call state sync (lightweight)
     setInterval(() => {
       if (document.body && !document.getElementById('teamux-studio-widget')) injectStudioUI();
       if (!document.getElementById('teamux-theme-styles') && currentTheme !== 'default') applyTheme(currentTheme);
+      updateActiveCallBanner();
       if (runtimeConfig.loudRingAlert && document.querySelector('[data-tid="accept-call-button"], [aria-label*="Accept with audio"]')) {
         playLoudRingChime();
       }
-    }, 4000);
+    }, 2000);
 
     // P6: MutationObserver only (removed redundant 5s polling interval)
     const titleElement = document.querySelector('title');
@@ -1789,39 +2189,23 @@ function initTeamuxPageHook() {
       }
     });
 
-    // Intercept pointerdown, mousedown, and click on the left App Bar rail during an active call
-    // so React cannot navigate the meeting window away to Calendar/Teams/Chat.
-    const handleNavIntercept = (e) => {
-      if (activeStreams.size === 0) return;
-      if (e.clientX > 76 || e.clientY < 45) return;
+    document.addEventListener('click', (e) => {
       const el = e.target;
       if (!el || !el.closest) return;
-      // Ignore our own Studio widget or Call Banner if somehow in that area
-      if (el.closest('#teamux-studio-widget, #teamux-call-banner')) return;
-
-      const clickable = el.closest('button, a, [role="button"], [role="tab"], [role="menuitem"], [tabindex]');
-      if (!clickable) return;
-
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      if (e.type === 'click') {
-        window.teamuxBridge?.openPopoutView();
-      }
-    };
-
-    document.addEventListener('pointerdown', handleNavIntercept, true);
-    document.addEventListener('mousedown', handleNavIntercept, true);
-    document.addEventListener('click', (e) => {
-      handleNavIntercept(e);
-      if (e.defaultPrevented) return;
-      const el = e.target;
-      if (!el) return;
       if (el.closest('[data-tid*="hangup"], [data-tid*="call-end"], [aria-label*="Leave"], [aria-label*="Hang up"], #hangup-button')) {
-        setTimeout(stopAllStreams, 150);
+        setTimeout(() => {
+          stopAllStreams();
+          setTimeout(updateActiveCallBanner, 1000);
+        }, 150);
       }
     }, true);
-  });
+  };
+
+  if (typeof document !== 'undefined' && document.readyState !== 'loading') {
+    initTopFrameOnDomReady();
+  } else {
+    window.addEventListener('DOMContentLoaded', initTopFrameOnDomReady);
+  }
 
   window.addEventListener('beforeunload', stopAllStreams);
 }
