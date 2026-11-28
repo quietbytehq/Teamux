@@ -24,6 +24,7 @@ function setupUserAgent(session) {
       '*://*.microsoftonline.com/*',
       '*://*.live.com/*',
       '*://*.office.com/*',
+      '*://*.office365.com/*',
       '*://*.sharepoint.com/*',
       '*://*.msftauth.net/*'
     ]

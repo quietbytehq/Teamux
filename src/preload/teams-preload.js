@@ -361,6 +361,90 @@ function initTeamuxPageHook() {
     return !isBrowsePopoutWindow && (syncedRemoteCallActive || isLocalCallActive());
   }
 
+  function hasHorizontallyFlippedTransform(el) {
+    if (!el || typeof window.getComputedStyle !== 'function') return false;
+    try {
+      const tr = window.getComputedStyle(el).transform;
+      if (!tr || tr === 'none') return false;
+      const m = tr.match(/^matrix\(\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)/);
+      if (!m) return false;
+      const a = parseFloat(m[1]);
+      const b = parseFloat(m[2]);
+      const c = parseFloat(m[3]);
+      const d = parseFloat(m[4]);
+      return a < -0.5 && Math.abs(b) < 0.1 && Math.abs(c) < 0.1 && d > 0.5;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function syncSelfViewMirrorState() {
+    if (typeof document === 'undefined' || !document.body) return;
+    const shouldUnmirror = Boolean(studioState.awaySlateActive || networkState.currentTier === 'audio-only');
+
+    const processDoc = (doc) => {
+      if (!doc) return;
+      const roots = collectAllRoots(doc);
+      for (const root of roots) {
+        if (!shouldUnmirror) {
+          let unmirrored = [];
+          try { unmirrored = root.querySelectorAll('[data-teamux-unmirrored="1"]'); } catch (_) {}
+          for (const el of unmirrored) {
+            const prev = el.getAttribute('data-teamux-prev-transform') || '';
+            if (prev) el.style.transform = prev;
+            else el.style.removeProperty('transform');
+            el.removeAttribute('data-teamux-unmirrored');
+            el.removeAttribute('data-teamux-prev-transform');
+          }
+          continue;
+        }
+
+        let videos = [];
+        try { videos = root.querySelectorAll('video'); } catch (_) {}
+        for (const v of videos) {
+          let cur = v;
+          for (let depth = 0; depth < 4 && cur && cur.nodeType === 1; depth++) {
+            if (cur.getAttribute('data-teamux-unmirrored') === '1') break;
+            if (hasHorizontallyFlippedTransform(cur)) {
+              const prevInline = cur.style.getPropertyValue('transform') || '';
+              if (prevInline) cur.setAttribute('data-teamux-prev-transform', prevInline);
+              cur.setAttribute('data-teamux-unmirrored', '1');
+              cur.style.setProperty('transform', 'scaleX(1)', 'important');
+              break;
+            }
+            cur = cur.parentElement;
+          }
+        }
+      }
+    };
+
+    processDoc(document);
+    const frames = document.querySelectorAll('iframe');
+    for (const fr of frames) {
+      try { processDoc(fr.contentDocument); } catch (_) {}
+    }
+  }
+
+  function hasReturnToCallPip() {
+    if (!isTopFrame || typeof document === 'undefined') return false;
+    const pipSel = '[data-tid="return-to-call-button"], [data-tid="calling-header-return-button"], [data-tid*="calling-pip" i], [data-tid*="calling-mini" i], [aria-label*="Return to call" i], [aria-label*="Back to call" i], [aria-label*="Return to meeting" i]';
+    const checkDoc = (doc) => {
+      if (!doc) return false;
+      for (const root of collectAllRoots(doc)) {
+        try {
+          const el = root.querySelector(pipSel);
+          if (el && el.getClientRects && el.getClientRects().length > 0) return true;
+        } catch (_) {}
+      }
+      return false;
+    };
+    if (checkDoc(document)) return true;
+    for (const fr of document.querySelectorAll('iframe')) {
+      try { if (checkDoc(fr.contentDocument)) return true; } catch (_) {}
+    }
+    return false;
+  }
+
   function registerStream(stream) {
     if (!stream) return stream;
     activeStreams.add(stream);
@@ -562,6 +646,7 @@ function initTeamuxPageHook() {
       updateStudioPillNetworkBadge();
       updateActiveCallBanner();
       updateNetworkDashboardUI();
+      syncSelfViewMirrorState();
     }
   }
 
@@ -1654,6 +1739,7 @@ function initTeamuxPageHook() {
     toggleMirror?.addEventListener('change', () => { studioState.mirrorCamera = toggleMirror.checked; saveStudioSettings(); });
     toggleAway?.addEventListener('change', () => {
       studioState.awaySlateActive = toggleAway.checked;
+      syncSelfViewMirrorState();
       if (!studioState.awaySlateActive && currentCameraContext) currentCameraContext.resumeRender();
     });
     toggleNoise?.addEventListener('change', () => { studioState.noiseGateEnabled = toggleNoise.checked; saveStudioSettings(); });
@@ -1801,8 +1887,11 @@ function initTeamuxPageHook() {
 
     const banner = document.getElementById('teamux-call-banner');
     if (!banner) return;
-    banner.style.display = isCallActive ? 'flex' : 'none';
-    if (!isCallActive) return;
+    // Only show "RETURN TO MEETING" banner if a call is active AND user is away from main stage / in corner PIP
+    const onMainStage = hasActiveCallDOM() && !hasReturnToCallPip();
+    const shouldShowBanner = isCallActive && !onMainStage;
+    banner.style.display = shouldShowBanner ? 'flex' : 'none';
+    if (!shouldShowBanner) return;
 
     const callText = document.getElementById('teamux-call-banner-text');
     if (networkState.audioFirstEngaged || networkState.currentTier === 'audio-only') {
@@ -1939,6 +2028,49 @@ function initTeamuxPageHook() {
     return null;
   }
 
+  function isTeamsWorkspaceReady() {
+    const roots = collectAllRoots(document);
+    for (const root of roots) {
+      try {
+        const mainEl = root.querySelector('[role="main"], [data-tid="chat-list"], [data-tid="message-pane"], [data-tid="team-list"], [data-tid="activity-feed"], [data-tid="calendar-container"]');
+        if (mainEl) {
+          const textLen = (mainEl.innerText || '').trim().length;
+          const childControls = mainEl.querySelectorAll('iframe, canvas, button, [role="listitem"], [role="row"], [role="grid"], [role="treeitem"], article').length;
+          if (textLen > 30 || childControls > 4) return true;
+        }
+      } catch (_) {}
+    }
+    return false;
+  }
+
+  function hasNonEmptyPopoutContent() {
+    const roots = collectAllRoots(document);
+    for (const root of roots) {
+      try {
+        const mainEl = root.querySelector('[role="main"]');
+        if (!mainEl) continue;
+        const textLen = (mainEl.innerText || '').trim().length;
+        const nodes = mainEl.querySelectorAll('iframe, [role="grid"], [role="listitem"], [role="row"], button').length;
+        if (textLen > 15 || nodes > 1) return true;
+      } catch (_) {}
+    }
+    return false;
+  }
+
+  function clickPopoutNavElement(el) {
+    if (!el) return;
+    try {
+      el.focus();
+      el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerType: 'mouse' }));
+      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerType: 'mouse' }));
+      el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+      el.click();
+    } catch (_) {
+      try { el.click(); } catch (_) {}
+    }
+  }
+
   function navigatePopoutToTarget(target) {
     if (!isTopFrame || !target) return;
     if (popoutNavTimer) {
@@ -1946,11 +2078,30 @@ function initTeamuxPageHook() {
       popoutNavTimer = null;
     }
 
-    const tryClickTarget = () => {
+    let firstButtonSeenAt = 0;
+
+    const tryClickTarget = (forceNow = false) => {
       const match = findMatchingPopoutNavItem(target);
       if (!match) return false;
-      match.click();
+      if (!firstButtonSeenAt) firstButtonSeenAt = Date.now();
+
+      // Wait until Teams initial workspace finishes booting (up to 4.5s max after app-bar appears)
+      // so clicking Calendar/Chat never races React's startup router into a black empty pane.
+      const waitedMs = Date.now() - firstButtonSeenAt;
+      if (!forceNow && (!isTeamsWorkspaceReady() || waitedMs < 700) && waitedMs < 5000) {
+        return false;
+      }
+
+      clickPopoutNavElement(match);
       window.teamuxBridge?.markPopoutTargetApplied();
+
+      // Safety recovery: if target pane stays empty after switching, re-trigger once cleanly
+      setTimeout(() => {
+        if (!hasNonEmptyPopoutContent()) {
+          const retryEl = findMatchingPopoutNavItem(target);
+          if (retryEl) clickPopoutNavElement(retryEl);
+        }
+      }, 3200);
       return true;
     };
 
@@ -1959,7 +2110,8 @@ function initTeamuxPageHook() {
     let attempts = 0;
     popoutNavTimer = setInterval(() => {
       attempts++;
-      if (tryClickTarget() || attempts >= 50) {
+      const timedOut = attempts >= 55;
+      if (tryClickTarget(timedOut) || timedOut) {
         clearInterval(popoutNavTimer);
         popoutNavTimer = null;
       }
@@ -1970,6 +2122,10 @@ function initTeamuxPageHook() {
     window.teamuxBridge?.getWindowRole().then((role) => {
       if (role && role.isBrowsePopout) {
         isBrowsePopoutWindow = true;
+        const studioEl = document.getElementById('teamux-studio-widget');
+        if (studioEl && !studioState.activeVideoStream) {
+          studioEl.style.display = 'none';
+        }
         updateActiveCallBanner();
         if (role.target) navigatePopoutToTarget(role.target);
       }
@@ -2149,13 +2305,23 @@ function initTeamuxPageHook() {
 
     applyTheme(currentTheme);
     injectStudioUI();
+    if (isBrowsePopoutWindow && !studioState.activeVideoStream) {
+      const studioEl = document.getElementById('teamux-studio-widget');
+      if (studioEl) studioEl.style.display = 'none';
+    }
     updateActiveCallBanner();
+    syncSelfViewMirrorState();
 
     // Watchdog for SPA navigation & cross-frame call state sync (lightweight)
     setInterval(() => {
       if (document.body && !document.getElementById('teamux-studio-widget')) injectStudioUI();
+      if (isBrowsePopoutWindow && !studioState.activeVideoStream) {
+        const studioEl = document.getElementById('teamux-studio-widget');
+        if (studioEl) studioEl.style.display = 'none';
+      }
       if (!document.getElementById('teamux-theme-styles') && currentTheme !== 'default') applyTheme(currentTheme);
       updateActiveCallBanner();
+      syncSelfViewMirrorState();
       if (runtimeConfig.loudRingAlert && document.querySelector('[data-tid="accept-call-button"], [aria-label*="Accept with audio"]')) {
         playLoudRingChime();
       }
@@ -2174,6 +2340,7 @@ function initTeamuxPageHook() {
         studioState.awaySlateActive = !studioState.awaySlateActive;
         const chk = document.getElementById('teamux-toggle-away');
         if (chk) chk.checked = studioState.awaySlateActive;
+        syncSelfViewMirrorState();
         if (!studioState.awaySlateActive && currentCameraContext) currentCameraContext.resumeRender();
       }
       if (studioState.pushToTalkEnabled && e.ctrlKey && e.code === 'Space' && !studioState.pttActive) {

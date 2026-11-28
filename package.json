@@ -2,7 +2,7 @@
   "name": "teamux",
   "productName": "Teamux",
   "desktopName": "teamux.desktop",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Unofficial Microsoft Teams desktop client for Linux and Windows with Adaptive Network Guardian, Low-Hardware Mode, Studio Camera, and Hardened Isolation.",
   "main": "src/main/index.js",
   "author": "QuietByte <hello@quietbytehq.uk>",

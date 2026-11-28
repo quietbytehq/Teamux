@@ -9,7 +9,7 @@ let activePickerWindow = null;
 let activePickerCallback = null;
 let pickerIpcRegistered = false;
 
-const TRUSTED_HOST_REGEX = /(^|\.)(teams\.cloud\.microsoft|teams\.microsoft\.com|cloud\.microsoft|teams\.live\.com|microsoft\.com|microsoftonline\.com|live\.com|office\.com|sharepoint\.com|skype\.com|msftauth\.net)$/i;
+const TRUSTED_HOST_REGEX = /(^|\.)(teams\.cloud\.microsoft|teams\.microsoft\.com|cloud\.microsoft|teams\.live\.com|microsoft\.com|microsoftonline\.com|live\.com|office\.com|office365\.com|sharepoint\.com|skype\.com|msftauth\.net)$/i;
 
 const ALLOWED_PERMISSIONS = new Set([
   'media',

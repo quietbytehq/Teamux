@@ -1,5 +1,5 @@
 // src/main/index.js
-// Main process entry point for Teamux v2.1.0
+// Main process entry point for Teamux v2.1.1
 
 const { app, BrowserWindow, session, ipcMain, shell, screen, dialog } = require('electron');
 const path = require('path');
@@ -573,7 +573,7 @@ ipcMain.on('open-popout-view', (_event, rawTarget) => {
       sandbox: true,
       nodeIntegration: false,
       spellcheck: !store.get('lowHardwareMode', false),
-      backgroundThrottling: true
+      backgroundThrottling: false
     }
   });
 

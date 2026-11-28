@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
-  <a href="#"><img src="https://img.shields.io/badge/version-v2.1.0-indigo.svg" alt="Version v2.1.0"></a>
+  <a href="#"><img src="https://img.shields.io/badge/version-v2.1.1-indigo.svg" alt="Version v2.1.1"></a>
   <a href="https://snapcraft.io/teamux"><img src="https://img.shields.io/badge/snapcraft-teamux-orange.svg" alt="Snapcraft"></a>
   <a href="#"><img src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20x64-lightgrey.svg" alt="Supported Platforms"></a>
 </p>
@@ -19,12 +19,12 @@
 
 ---
 
-## ✨ What's New in v2.1.0
+## ✨ What's New in v2.1.1
 
 - 🪟 **Pop-Out Multitasking During Active Meetings:**
-  - Clicking **Calendar**, **Chat**, **Teams**, **Activity**, or **Calls** in the left rail (or pressing `Ctrl+1..6`) while in a meeting opens that section in a **separate Teamux window** automatically — keeping your live meeting stage undisturbed.
-- ☕ **Reliable Be Right Back Slate:**
-  - Continuous 8 FPS animated keep-alive prevents Teams WebRTC from marking your camera as disabled after extended breaks.
+  - Clicking **Calendar**, **Chat**, **Teams**, **Activity**, or **Calls** in the left rail (or pressing `Ctrl+1..6`) while in a meeting opens that section in a **separate Teamux window** without interrupting your meeting, and waits for workspace hydration before switching views.
+- ☕ **Be Right Back Slate (Un-Mirrored Self-View & 8 FPS Keep-Alive):**
+  - Keeps WebRTC frames active at ~8 FPS and automatically un-mirrors Teams' local self-view CSS so **Be Right Back!** reads cleanly left-to-right for both you and everyone in the meeting.
 - ⚡ **Low-Hardware / Potato PC Mode:**
   - **0% CPU Camera Pass-Through** when Studio effects are off, hardware-level resolution downscaling (`applyConstraints`), paused render loops in Audio-First/Away modes, and dynamic background throttling when idle.
 - 🔒 **Hardened Security & Privacy Lock:**
@@ -38,7 +38,7 @@
 
 ---
 
-## 📦 Downloads & Installation (v2.1.0)
+## 📦 Downloads & Installation (v2.1.1)
 
 Download binaries and the **Picture-Based PDF User Guide** from [Releases](https://github.com/quietbytehq/teamux/releases) or install via Snapcraft:
 
@@ -49,18 +49,18 @@ Download binaries and the **Picture-Based PDF User Guide** from [Releases](https
   ```
 * **Universal AppImage:**
   ```bash
-  chmod +x teamux-v2.1.0-linux-x86_64.AppImage
-  ./teamux-v2.1.0-linux-x86_64.AppImage
+  chmod +x teamux-v2.1.1-linux-x86_64.AppImage
+  ./teamux-v2.1.1-linux-x86_64.AppImage
   ```
-* **Ubuntu / Debian (`.deb`):** `sudo apt install ./teamux-v2.1.0-linux-amd64.deb`
-* **Arch Linux (`.pacman`):** `sudo pacman -U teamux-v2.1.0-linux-x64.pacman`
-* **Portable Tarball (`.tar.gz`):** `tar -xvf teamux-v2.1.0-linux-x64.tar.gz`
+* **Ubuntu / Debian (`.deb`):** `sudo apt install ./teamux-v2.1.1-linux-amd64.deb`
+* **Arch Linux (`.pacman`):** `sudo pacman -U teamux-v2.1.1-linux-x64.pacman`
+* **Portable Tarball (`.tar.gz`):** `tar -xvf teamux-v2.1.1-linux-x64.tar.gz`
 
 ### 🪟 Windows
-* **MSI Installer (Enterprise / Intune / GPO):** Download [`teamux-v2.1.0-windows-x64.msi`](https://github.com/quietbytehq/teamux/releases/download/v2.1.0/teamux-v2.1.0-windows-x64.msi)
-* **Setup Installer (`.exe`):** Download [`teamux-v2.1.0-windows-setup-x64.exe`](https://github.com/quietbytehq/teamux/releases/download/v2.1.0/teamux-v2.1.0-windows-setup-x64.exe)
-* **Portable Executable:** Download and double-click [`teamux-v2.1.0-windows-portable-x64.exe`](https://github.com/quietbytehq/teamux/releases/download/v2.1.0/teamux-v2.1.0-windows-portable-x64.exe) (no installation or admin rights required).
-* **Standalone Zip:** Extract [`teamux-v2.1.0-windows-x64.zip`](https://github.com/quietbytehq/teamux/releases/download/v2.1.0/teamux-v2.1.0-windows-x64.zip) and run `Teamux.exe`.
+* **MSI Installer (Enterprise / Intune / GPO):** Download [`teamux-v2.1.1-windows-x64.msi`](https://github.com/quietbytehq/teamux/releases/download/v2.1.1/teamux-v2.1.1-windows-x64.msi)
+* **Setup Installer (`.exe`):** Download [`teamux-v2.1.1-windows-setup-x64.exe`](https://github.com/quietbytehq/teamux/releases/download/v2.1.1/teamux-v2.1.1-windows-setup-x64.exe)
+* **Portable Executable:** Download and double-click [`teamux-v2.1.1-windows-portable-x64.exe`](https://github.com/quietbytehq/teamux/releases/download/v2.1.1/teamux-v2.1.1-windows-portable-x64.exe) (no installation or admin rights required).
+* **Standalone Zip:** Extract [`teamux-v2.1.1-windows-x64.zip`](https://github.com/quietbytehq/teamux/releases/download/v2.1.1/teamux-v2.1.1-windows-x64.zip) and run `Teamux.exe`.
 
 ---
 
